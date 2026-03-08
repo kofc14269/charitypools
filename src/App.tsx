@@ -43,7 +43,7 @@ const DEFAULT_POOL_SETTINGS: PoolSettings = {
 
 const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   adminPassword: 'admin',
-  charityName: 'Super Bowl Charity Contest',
+  charityName: 'Kofc Charity Pools',
   zelleAccount: '',
   paypalAccount: '',
   venmoAccount: '',
@@ -131,7 +131,7 @@ const App: React.FC = () => {
         }
         setState(data);
       } else {
-        const initialPool = createPool('Super Bowl Contest');
+        const initialPool = createPool('Kofc Charity Pools');
         const initialState: AppState = { 
           pools: [initialPool], 
           participants: [],

@@ -32,7 +32,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ globalSettings, activePool })
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const context = `
-        You are the "Charity Squares Assistant" for a Super Bowl squares contest.
+        You are the "Charity Squares Assistant" for the Kofc Charity Pools contest.
         Current Charity: ${globalSettings.charityName}.
         Current Matchup: ${activePool.settings.teamA} vs ${activePool.settings.teamB}.
         Cost per square: $${activePool.settings.costPerBox}.
