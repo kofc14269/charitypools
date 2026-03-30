@@ -37,16 +37,12 @@
         alert("Please allow popups to use the Isolated Print View.");
         return;
       }
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Print - Charity Squares</title>
-            ${styles}
-            <style>
-              body { padding: 20px; background: white; }
-              .no-print { display: none !important; }
-            </style>
-  <script type="importmap">
+      printWindow.document.write(
+        '<html><head>' +
+        '<title>Print - Charity Squares</title>' +
+        styles +
+        '<style>body { padding: 20px; background: white; }.no-print { display: none !important; }</style>' +
+        '  <script type="importmap">
       {
         "imports": {
           "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
@@ -59,23 +55,16 @@
         }
       }
     </script>
-            <script type="module" crossorigin src="/assets/index-DQKyeoBT.js"></script>
-            <link rel="modulepreload" crossorigin href="/assets/vendor-VKNFUXrR.js">
-            <link rel="modulepreload" crossorigin href="/assets/react-DnXJJzMh.js">
-            <link rel="modulepreload" crossorigin href="/assets/firebase-GSpa3bCz.js">
-            <link rel="stylesheet" crossorigin href="/assets/index-AzqIOUVD.css">
-          </head>
-          <body>
-            ${htmlContent}
-            <script>
-              window.onload = function() {
-                window.focus();
-                setTimeout(function() { window.print(); }, 500);
-              };
-            <\/script>
-          </body>
-        </html>
-      `);
+  <script type="module" crossorigin src="/assets/index-DQKyeoBT.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/vendor-VKNFUXrR.js">
+  <link rel="modulepreload" crossorigin href="/assets/react-DnXJJzMh.js">
+  <link rel="modulepreload" crossorigin href="/assets/firebase-GSpa3bCz.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-AzqIOUVD.css">
+</head><body>' +
+        htmlContent +
+        '<script>window.onload = function() { window.focus(); setTimeout(function() { window.print(); }, 500); };<\/script>' +
+        '</body></html>'
+      );
       setTimeout(() => printWindow.document.close(), 250);
     };
   </script>
