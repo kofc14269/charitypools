@@ -36,11 +36,21 @@
                 '<title>Print - Charity Squares</title>' +
                 styles +
                 '<style>body { padding: 20px; background: white; }.no-print { display: none !important; }</style>' +
-                '  <script type="importmap">\n      {\n        "imports": {\n          "react-dom/": "https://esm.sh/react-dom@^19.2.4/",\n          "@google/genai": "https://esm.sh/@google/genai@^1.38.0",\n          "react/": "https://esm.sh/react@^19.2.4/",\n          "react": "https://esm.sh/react@^19.2.4",\n          "firebase/app": "https://www.gstatic.com/firebasejs/11.3.1/firebase-app.js",\n          "firebase/database": "https://www.gstatic.com/firebasejs/11.3.1/firebase-database.js",\n          "firebase/": "https://esm.sh/firebase@^12.8.0/"\n        }\n      }\n    </script>\n  <script type="module" crossorigin src="/charitypools/assets/index-COG3TNzZ.js"></script>\n  <link rel="modulepreload" crossorigin href="/charitypools/assets/vendor-VKNFUXrR.js">\n  <link rel="modulepreload" crossorigin href="/charitypools/assets/react-DnXJJzMh.js">\n  <link rel="modulepreload" crossorigin href="/charitypools/assets/firebase-GSpa3bCz.js">\n  <link rel="stylesheet" crossorigin href="/charitypools/assets/index-bPOpgpph.css">' +
-                '</head><body>' +
-                htmlContent +
-                '<script>window.onload = function() { window.focus(); setTimeout(function() { window.print(); }, 500); };<\/script>' +
-                '</body></html>'
+                '  <script type="importmap">\n      {\n        "imports": {\n          "react-dom/": "https://esm.sh/react-dom@^19.2.4/",\n          "@google/genai": "https://esm.sh/@google/genai@^1.38.0",\n          "react/": "https://esm.sh/react@^19.2.4/",\n          "react": "https://esm.sh/react@^19.2.4",\n          "firebase/app": "https://www.gstatic.com/firebasejs/11.3.1/firebase-app.js",\n          "firebase/database": "https://www.gstatic.com/firebasejs/11.3.1/firebase-database.js",\n          "firebase/": "https://esm.sh/firebase@^12.8.0/"\n        }\n      }\n    </script>
+    \n
+    <script type="module" crossorigin src="/charitypools/assets/index-COG3TNzZ.js"></script>\n
+    <link rel="modulepreload" crossorigin href="/charitypools/assets/vendor-VKNFUXrR.js">\n
+    <link rel="modulepreload" crossorigin href="/charitypools/assets/react-DnXJJzMh.js">\n
+    <link rel="modulepreload" crossorigin href="/charitypools/assets/firebase-GSpa3bCz.js">\n
+    <link rel="stylesheet" crossorigin href="/charitypools/assets/index-bPOpgpph.css">' +
+    '
+</head>
+
+<body>' +
+    htmlContent +
+    '
+    <script>window.onload = function () { window.focus(); setTimeout(function () { window.print(); }, 500); };<\/script>' +
+            '</body></html>'
             );
             setTimeout(() => printWindow.document.close(), 250);
         };
@@ -48,13 +58,13 @@
 
     <!-- Import map -->
 
-</head>
+    </head>
 
-<body class="bg-gray-50 text-gray-900">
-    <!-- Your entire board must be inside this container -->
-    <div id="root"></div>
-    <!-- React entry point -->
+    <body class="bg-gray-50 text-gray-900">
+        <!-- Your entire board must be inside this container -->
+        <div id="root"></div>
+        <!-- React entry point -->
 
-</body>
+    </body>
 
 </html>
