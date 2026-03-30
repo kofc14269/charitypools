@@ -75,11 +75,11 @@
             <link rel="stylesheet" crossorigin href="/assets/index-AzqIOUVD.css">
           </head>
           <body>
-            ${htmlContent}
+            <!-- Board HTML will be injected here by print window script -->
             <script>
               window.onload = function() {
                 window.focus();
-                setTimeout(() => window.print(), 500);
+                setTimeout(function() { window.print(); }, 500);
               };
             <\/script>
           </body>
