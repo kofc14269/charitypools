@@ -22,13 +22,11 @@
 
   <!-- Bulletproof print window -->
   <script>
-    window.openPrintWindow = function () {
-      const board = document.getElementById("board-container");
-      if (!board) {
-        alert("Board container not found.");
+    window.openPrintWindow = function (htmlContent) {
+      if (!htmlContent) {
+        alert("No board content provided to print.");
         return;
       }
-      const htmlContent = board.outerHTML;
       const styles = Array.from(
         document.querySelectorAll("style, link[rel='stylesheet']")
       )
