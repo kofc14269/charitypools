@@ -1,5 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 
 <head>
     <meta charset="UTF-8" />
@@ -15,58 +17,16 @@
 
 
 
-    <!-- Bulletproof print window -->
-    <script>
-        window.openPrintWindow = function (htmlContent) {
-            if (!htmlContent) {
-                alert("No board content provided to print.");
-                return;
-            }
-            const styles = Array.from(
-                document.querySelectorAll("style, link[rel='stylesheet']")
-            )
-                .map((s) => s.outerHTML)
-                .join("");
-            const printWindow = window.open("", "_blank", "width=1200,height=800");
-            if (!printWindow) {
-                alert("Please allow popups to use the Isolated Print View.");
-                return;
-            }
-            printWindow.document.write(
-                '<html><head>' +
-                '<title>Print - Charity Squares</title>' +
-                styles +
-                '<style>body { padding: 20px; background: white; }.no-print { display: none !important; }</style>' +
-                '</head><body>' +
-                htmlContent +
-                '<script>window.onload = function() { window.focus(); setTimeout(function() { window.print(); }, 500); };<\/script>' +
-                '</body></html>'
-            );
-            setTimeout(() => printWindow.document.close(), 250);
-        };
-    </script>
 
     <!-- Import map -->
-    <script type="importmap">
-      {
-        "imports": {
-          "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-          "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
-          "react/": "https://esm.sh/react@^19.2.4/",
-          "react": "https://esm.sh/react@^19.2.4",
-          "firebase/app": "https://www.gstatic.com/firebasejs/11.3.1/firebase-app.js",
-          "firebase/database": "https://www.gstatic.com/firebasejs/11.3.1/firebase-database.js",
-          "firebase/": "https://esm.sh/firebase@^12.8.0/"
-        }
-      }
-    </script>
+
 </head>
 
 <body class="bg-gray-50 text-gray-900">
     <!-- Your entire board must be inside this container -->
     <div id="root"></div>
     <!-- React entry point -->
-    <script type="module" src="/src/index.tsx"></script>
+
 </body>
 
 </html>
