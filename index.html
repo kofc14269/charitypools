@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" style="height:100%;overflow:hidden;">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
@@ -8,18 +8,38 @@
 
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
-  <script type="module" crossorigin src="./assets/index-B1Jvs5Ji.js"></script>
+  
+  <script>
+    window.openPrintWindow = function(content) {
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write('<html><head><title>Print Charity Grid</title>');
+      printWindow.document.write('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />');
+      printWindow.document.write('<style>');
+      printWindow.document.write('body { margin: 0; padding: 20px; font-family: sans-serif; }');
+      printWindow.document.write('.print-hidden, .no-print { display: none !important; }');
+      printWindow.document.write('</style>  <script type="module" crossorigin src="./assets/index-CJRXtd-8.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/react-vendor-BUwNS7rP.js">
   <link rel="modulepreload" crossorigin href="./assets/vendor-BXWtuYvb.js">
   <link rel="modulepreload" crossorigin href="./assets/firebase-DVtlXMyr.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-CgWYSKF0.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-UR0O-TZL.css">
+</head><body>');
+      printWindow.document.write(content);
+      printWindow.document.write('</body></html>');
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 500);
+    };
+  </script>
 </head>
 
-<body class="bg-gray-50 text-gray-900" style="height:100%;overflow:hidden;margin:0;">
+<body class="bg-gray-50 text-gray-900">
   <!-- React mounts here -->
-  <div id="root" style="height:100%;overflow:hidden;"></div>
+  <div id="root"></div>
 
-  <!-- Vite React entry point -->
+  <!-- Vite React entry point -->
 </body>
 
 </html>
