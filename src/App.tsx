@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from 'react';
 import { AppState, Square, Tab, Participant, PaymentTransaction, Pool, GlobalSettings, PoolSettings, ScoreEntry, PoolType, SurvivorData, ThirteenRunData, ThirteenRunEntry } from './types';
 import Grid from './components/Grid';
 import { db, auth } from './firebase';
@@ -144,6 +144,15 @@ const App: React.FC = () => {
   const [ownerUid, setOwnerUid] = useState<string | null>(null);
 
   const [copiedContestId, setCopiedContestId] = useState<string | null>(null);
+
+  const mainRef = useRef<HTMLDivElement>(null);
+
+  // Scroll main container to top reactively on tab change
+  useEffect(() => {
+    if (mainRef.current) {
+      mainRef.current.scrollTop = 0;
+    }
+  }, [activeTab]);
 
   // Poll for live scores every 60 seconds
   useEffect(() => {
@@ -930,7 +939,7 @@ const App: React.FC = () => {
       </header>
 
 
-      <main className="flex-1 min-h-0 max-w-7xl mx-auto w-full p-4 md:p-8 overflow-y-auto overflow-x-hidden">
+      <main ref={mainRef} className="flex-1 min-h-0 max-w-7xl mx-auto w-full p-4 md:p-8 overflow-y-auto overflow-x-hidden">
 
 
         {activeTab === 'grid' && (activePool?.type === 'squares' || !activePool?.type) && (
