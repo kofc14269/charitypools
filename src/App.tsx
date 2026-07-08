@@ -1191,10 +1191,10 @@ const App: React.FC = () => {
               window.history.replaceState({}, '', url.toString());
               setActiveTab('admin');
             }} 
-            className="text-gray-300 hover:text-indigo-600 transition-colors cursor-pointer p-1"
+            className="text-gray-400 hover:text-indigo-600 transition-colors cursor-pointer p-1.5 ml-2"
             title="Admin Access Toggle"
           >
-            <i className="fas fa-lock text-[8px]"></i>
+            <i className="fas fa-lock text-sm"></i>
           </button>
         </p>
       </footer>
