@@ -593,8 +593,12 @@ const App: React.FC = () => {
 
   const handleClearUserBoxes = useCallback((participantId: string) => {
     if (!state || !activePool || !ownerUid) return;
+    if (!window.confirm('Remove this participant and clear all their squares?')) return;
+
     const poolIndex = state.pools.findIndex(p => p.id === state.activePoolId);
     const updates: any = {};
+
+    // 1. Clear the participant's squares in the active pool
     activePool.squares.forEach((sq, idx) => {
       if (sq.participantId === participantId) {
         updates[`users/${ownerUid}/state/pools/${poolIndex}/squares/${idx}`] = {
@@ -606,6 +610,17 @@ const App: React.FC = () => {
         };
       }
     });
+
+    // 2. Remove from each pool's participants sub-list
+    state.pools.forEach((pool, pIdx) => {
+      const filteredParticipants = (pool.participants || []).filter(p => p.id !== participantId);
+      updates[`users/${ownerUid}/state/pools/${pIdx}/participants`] = filteredParticipants;
+    });
+
+    // 3. Remove from the global participants registry
+    const filteredGlobal = (state.participants || []).filter(p => p.id !== participantId);
+    updates[`users/${ownerUid}/state/participants`] = filteredGlobal;
+
     update(ref(db), updates);
   }, [state, activePool, ownerUid]);
 
