@@ -30,9 +30,9 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ globalSettings, activePool })
     setIsLoading(true);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = globalSettings.geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
-        setMessages(prev => [...prev, { role: 'ai', text: "API key is missing. Please set VITE_GEMINI_API_KEY in your .env file." }]);
+        setMessages(prev => [...prev, { role: 'ai', text: "AI Assistant is not configured. Please set your Gemini API key in Admin → Settings → AI Assistant." }]);
         setIsLoading(false);
         return;
       }

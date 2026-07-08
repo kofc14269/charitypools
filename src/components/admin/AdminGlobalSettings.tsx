@@ -118,6 +118,31 @@ const AdminGlobalSettings: React.FC<AdminGlobalSettingsProps> = ({
           </div>
         </div>
       </div>
+
+      {/* AI Assistant */}
+      <div className="space-y-4 pt-6 border-t border-indigo-50">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center">
+            <i className="fas fa-robot text-indigo-600 text-sm"></i>
+          </div>
+          <div>
+            <h4 className="text-sm font-black text-indigo-900 uppercase tracking-tight">AI Assistant</h4>
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Gemini API Key</p>
+          </div>
+        </div>
+        <input
+          title="Gemini API Key"
+          type="password"
+          value={globalSettings?.geminiApiKey || ''}
+          onChange={e => onUpdateGlobalSettings({ geminiApiKey: e.target.value })}
+          placeholder="AQ.Ab8RN6Ku... (from aistudio.google.com)"
+          className="w-full p-4 bg-indigo-50/50 border-2 border-transparent focus:border-indigo-400 rounded-2xl font-mono text-sm text-indigo-950 outline-none transition-all placeholder:text-indigo-200 placeholder:font-sans placeholder:text-xs"
+        />
+        <p className="text-[9px] font-medium text-gray-400 italic leading-relaxed">
+          Your key is saved securely in Firebase — it is never baked into the app code or uploaded to GitHub.
+          Get a free key at <span className="text-indigo-400 font-bold">aistudio.google.com</span>.
+        </p>
+      </div>
     </div>
   );
 };
