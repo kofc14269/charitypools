@@ -353,35 +353,53 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                       </table>
                     </div>
                   </div>
-                ) : (
-                  <div className="bg-indigo-50/30 rounded-[2rem] border border-indigo-50 overflow-hidden">
-                    <table className="w-full text-left">
-                      <thead>
-                        <tr className="border-b border-indigo-100">
-                          <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Participant</th>
-                          <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Alias</th>
-                          <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Contact</th>
-                          <th className="px-6 py-4 text-right"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {participants.map(p => (
-                          <tr key={p.id} className="border-b border-indigo-50">
-                            <td className="px-6 py-4 font-black text-indigo-900 text-sm uppercase">{p.name}</td>
-                            <td className="px-6 py-4 text-indigo-500 font-black text-[11px] uppercase">{p.alias || '--'}</td>
-                            <td className="px-6 py-4 text-indigo-400 font-bold text-[10px]">{p.email || p.phone || '--'}</td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <button onClick={() => handleEditParticipant(p)} className="text-indigo-500 hover:text-indigo-800 px-3 py-1 font-black uppercase text-[9px] tracking-tighter">Edit Entry</button>
-                                <button onClick={() => onClearUserBoxes(p.id)} className="text-red-400 hover:text-red-600 px-3 py-1 font-black uppercase text-[9px] tracking-tighter">Remove</button>
-                              </div>
-                            </td>
+                ) : (() => {
+                  // Build one row per assigned square so Remove targets exactly one entry
+                  const squareRows = squares
+                    .filter(sq => sq.assigned && sq.participantId)
+                    .map(sq => {
+                      const p = participants.find(x => x.id === sq.participantId);
+                      return p ? { sq, p } : null;
+                    })
+                    .filter(Boolean) as { sq: Square; p: Participant }[];
+
+                  return (
+                    <div className="bg-indigo-50/30 rounded-[2rem] border border-indigo-50 overflow-hidden">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="border-b border-indigo-100">
+                            <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Square #</th>
+                            <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Participant</th>
+                            <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Alias</th>
+                            <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Contact</th>
+                            <th className="px-6 py-4 text-right"></th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                        </thead>
+                        <tbody>
+                          {squareRows.length === 0 && (
+                            <tr>
+                              <td colSpan={5} className="px-6 py-8 text-center text-gray-400 text-xs font-bold uppercase">No squares assigned yet</td>
+                            </tr>
+                          )}
+                          {squareRows.map(({ sq, p }) => (
+                            <tr key={sq.id} className="border-b border-indigo-50">
+                              <td className="px-6 py-4 font-black text-indigo-400 text-sm">#{sq.id + 1}</td>
+                              <td className="px-6 py-4 font-black text-indigo-900 text-sm uppercase">{p.name}</td>
+                              <td className="px-6 py-4 text-indigo-500 font-black text-[11px] uppercase">{p.alias || '--'}</td>
+                              <td className="px-6 py-4 text-indigo-400 font-bold text-[10px]">{p.email || p.phone || '--'}</td>
+                              <td className="px-6 py-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button onClick={() => handleEditParticipant(p)} className="text-indigo-500 hover:text-indigo-800 px-3 py-1 font-black uppercase text-[9px] tracking-tighter">Edit</button>
+                                  <button onClick={() => onUnassignSquare(sq.id)} className="text-red-400 hover:text-red-600 px-3 py-1 font-black uppercase text-[9px] tracking-tighter">Remove</button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
