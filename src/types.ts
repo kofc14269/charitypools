@@ -77,8 +77,6 @@ export interface GlobalSettings {
   // Default team logos (applied across pools unless overridden)
   teamALogo?: string;
   teamBLogo?: string;
-  // Gemini AI Assistant API key (stored in Firebase, not baked into build)
-  geminiApiKey?: string;
 }
 
 export interface PoolSettings {

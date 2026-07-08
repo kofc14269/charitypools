@@ -16,7 +16,7 @@ import {
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const EntryModal = lazy(() => import('./components/EntryModal'));
 const HelpModal = lazy(() => import('./components/HelpModal'));
-const AIAssistant = lazy(() => import('./components/AIAssistant'));
+
 const Winners = lazy(() => import('./components/Winners'));
 const PlayerProfile = lazy(() => import('./components/PlayerProfile'));
 const SurvivorEngine = lazy(() => import('./components/SurvivorEngine'));
@@ -1241,11 +1241,6 @@ const App: React.FC = () => {
         <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
       </Suspense>
 
-      {activePool && (
-        <Suspense fallback={null}>
-          <AIAssistant globalSettings={state.globalSettings} activePool={activePool} />
-        </Suspense>
-      )}
 
     </div>
   );
