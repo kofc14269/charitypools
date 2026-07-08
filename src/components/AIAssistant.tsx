@@ -48,7 +48,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ globalSettings, activePool })
       `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.5-flash',
         contents: `${context}\n\nUser Question: ${userMsg}`,
       });
 
