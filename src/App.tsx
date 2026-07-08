@@ -120,6 +120,10 @@ const App: React.FC = () => {
   const [pendingSelection, setPendingSelection] = useState<number[]>([]);
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [showAdminOption, setShowAdminOption] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('admin') === 'true';
+  });
 
   // Sports Live Data
   const [liveScores, setLiveScores] = useState<{ nfl: GameEvent[], mlb: GameEvent[] }>({ nfl: [], mlb: [] });
@@ -887,9 +891,7 @@ const App: React.FC = () => {
                   gameTab.label = '13-Run';
                 }
 
-                const queryParams = new URLSearchParams(window.location.search);
-                const hasAdminQuery = queryParams.get('admin') === 'true';
-                const showAdminTab = isAdminAuthenticated || hasAdminQuery;
+                 const showAdminTab = isAdminAuthenticated || showAdminOption;
 
                 const tabs: Array<{ id: Tab; icon: string; label: string }> = [
                   gameTab as any,
@@ -1178,12 +1180,13 @@ const App: React.FC = () => {
           <button 
             type="button"
             onClick={() => {
+              const newShowAdmin = !showAdminOption;
+              setShowAdminOption(newShowAdmin);
               const url = new URL(window.location.href);
-              const q = url.searchParams;
-              if (q.get('admin') === 'true') {
-                q.delete('admin');
+              if (newShowAdmin) {
+                url.searchParams.set('admin', 'true');
               } else {
-                q.set('admin', 'true');
+                url.searchParams.delete('admin');
               }
               window.history.replaceState({}, '', url.toString());
               setActiveTab('admin');
