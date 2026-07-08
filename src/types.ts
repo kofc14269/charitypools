@@ -14,6 +14,7 @@ export interface Participant {
   phone: string;
   alias: string;
   paymentHistory?: PaymentTransaction[];
+  winningsPayoutHistory?: PaymentTransaction[];
 }
 
 export interface Square {
@@ -33,10 +34,15 @@ export interface ScoreEntry {
   teamBScore: number;
   label: string; // "Q1", "Score Change", etc.
   timestamp: number;
+  // Legacy/compat payout override field used by older records and admin edits.
+  payout?: number;
+  customPayout?: number;
+  amountPaidTowardWinnings?: number;
+  winningsPaymentMethod?: string;
 }
 
 export interface PayoutSettings {
-  mode: 'standard' | 'scoreChange';
+  mode: 'standard' | 'scoreChange' | 'singleWinner';
   standardPayoutType: 'percent' | 'fixed';
   charityPayoutType: 'percent' | 'fixed';
   charityPercent: number;
@@ -71,7 +77,7 @@ export interface GlobalSettings {
   // Default team logos (applied across pools unless overridden)
   teamALogo?: string;
   teamBLogo?: string;
-} 
+}
 
 export interface PoolSettings {
   teamA: string;
@@ -84,26 +90,64 @@ export interface PoolSettings {
   colNumbers: number[];
   isLocked: boolean;
   payouts: PayoutSettings;
+  rules?: string;
 }
 
 // Added GameSettings to fix missing export error in components
 export type GameSettings = GlobalSettings & PoolSettings;
 
+export type PoolType = 'squares' | 'survivor' | '13run' | 'pickem';
+
+export interface SurvivorPick {
+  week: number;
+  teamId: string;
+  teamName: string;
+  status: 'pending' | 'win' | 'loss' | 'draw';
+}
+
+export interface SurvivorData {
+  participants: {
+    [participantId: string]: {
+      picks: SurvivorPick[];
+      isEliminated: boolean;
+      eliminatedWeek?: number;
+    }
+  };
+  currentWeek: number;
+}
+
+export interface ThirteenRunEntry {
+  participantId?: string | null;
+  teamId: string;
+  teamName: string;
+  punches: number[]; // Array of scores achieved (0-13)
+  isWinner: boolean;
+}
+
+export interface ThirteenRunData {
+  entries: {
+    [teamId: string]: ThirteenRunEntry;
+  };
+}
+
 export interface Pool {
   id: string;
   name: string;
-  squares: Square[];
+  type: PoolType;
+  sport?: string;
+  squares?: Square[]; // Optional: only for squares type
   participants: Participant[];
   settings: PoolSettings;
-  scores: ScoreEntry[];
+  scores?: ScoreEntry[]; // Optional: primarily for squares type
+  gameData?: SurvivorData | ThirteenRunData; // Modular data for new engines
   createdAt: number;
 }
 
 export interface AppState {
   pools: Pool[];
-  participants?: Participant[]; // global participant registry (new)
+  participants?: Participant[]; // global participant registry
   activePoolId: string;
   globalSettings: GlobalSettings;
 }
 
-export type Tab = 'grid' | 'winners' | 'admin' | 'player';
+export type Tab = 'grid' | 'winners' | 'admin' | 'player' | 'survivor' | '13run';

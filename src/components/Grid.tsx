@@ -1,6 +1,7 @@
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Square, GameSettings, Participant, Pool, ScoreEntry } from '../types';
+import { calculateFinancialSummary, formatMoney, solvePayoutForEntry } from '../utils/finance';
 
 interface GridProps {
   squares: Square[];
@@ -17,35 +18,52 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [zoom, setZoom] = useState(1);
   const gridRef = useRef<HTMLDivElement>(null);
-  const lastTouchDist = useRef<number | null>(null);
 
-  // Automatic Fit-to-Width Logic
   useEffect(() => {
-    const fitToWidth = () => {
-      if (gridRef.current) {
-        const container = gridRef.current;
-        const innerContent = container.querySelector('.grid-inner-content') as HTMLElement;
-        
-        if (innerContent) {
-          const containerWidth = container.clientWidth - 40; // Allow some padding
-          const boardWidth = innerContent.offsetWidth;
-          
-          if (boardWidth > 0) {
-            const calculatedZoom = containerWidth / boardWidth;
-            setZoom(Math.min(1.0, parseFloat(calculatedZoom.toFixed(2))));
-          }
-        }
-      }
+    const calculate = () => {
+      if (!gridRef.current) return;
+      const containerWidth = gridRef.current.clientWidth;
+
+      // iOS Safari fires resize during URL-bar show/hide transitions.
+      // During those transitions clientWidth can momentarily return 0.
+      // If we allow zoom = 0/containerWidth the grid becomes invisible and stays
+      // invisible until refresh. Guard against it explicitly.
+      if (containerWidth <= 0) return;
+
+      const isMd = window.innerWidth >= 768;
+
+      // Pixel values from the Tailwind classes used below — deterministic, immune to zoom feedback
+      // w-28=112, w-40=160, w-14=56, w-20=80, gap-[1px]=1, gap-[2px]=2, p-4=16
+      const squareW  = isMd ? 160 : 112;  // LABEL_WIDTH_CLASS
+      const rowNumW  = isMd ? 112 : 56;   // ROW_NUM_WIDTH_CLASS
+      const teamW    = isMd ? 160 : 80;   // TEAM_VERTICAL_WIDTH_CLASS
+      const gap      = isMd ? 2   : 1;    // gap between squares
+      const mr       = isMd ? 2   : 1;    // mr between row-num col and grid body
+      const padding  = 32;                 // p-4 = 16px × 2 sides on zoomed wrapper
+
+      // teamLabel + rowNumbers + margin + 10 squares + 9 inter-square gaps + 2× padding
+      const naturalW = teamW + rowNumW + mr + (10 * squareW) + (9 * gap) + padding;
+
+      // Clamp: never let zoom drop below 0.1 (failsafe) or above 1.0
+      setZoom(Math.max(0.1, Math.min(1.0, containerWidth / naturalW)));
     };
 
-    const timer = setTimeout(fitToWidth, 300);
-    window.addEventListener('resize', fitToWidth);
-    
+    // Debounce resize so the handler doesn't fire mid-transition (e.g. iOS URL-bar animation)
+    let debounceTimer: ReturnType<typeof setTimeout>;
+    const handleResize = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(calculate, 200);
+    };
+
+    calculate(); // Run immediately on mount
+    window.addEventListener('resize', handleResize);
     return () => {
-      clearTimeout(timer);
-      window.removeEventListener('resize', fitToWidth);
+      clearTimeout(debounceTimer);
+      window.removeEventListener('resize', handleResize);
     };
   }, []);
+
+
 
   const participantMap = useMemo(() => {
     const map: Record<string, Participant> = {};
@@ -66,7 +84,7 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
 
   const winningSquareIds = useMemo(() => {
     const ids = new Set<number>();
-    const { scores = [] } = activePool;
+    const { scores = [] } = activePool || {};
     const { rowNumbers, colNumbers } = settings;
     
     (scores || []).forEach(s => {
@@ -81,48 +99,42 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
       }
     });
     return ids;
-  }, [activePool.scores, squares, settings.rowNumbers, settings.colNumbers]);
+  }, [activePool?.scores, squares, settings.rowNumbers, settings.colNumbers]);
+
+  const { totalPot: pledgedTotal, playerPot: actualWinnersTotal, projectedPlayerPot, projectedCharity, charityAmount: actualCharity } = useMemo(() => {
+    return calculateFinancialSummary(activePool, settings, activePool?.scores || [], squares);
+  }, [activePool, settings, squares]);
 
   const stats = useMemo(() => {
     const assignedCount = squares.filter(s => s.assigned).length;
     const costPerBox = settings.costPerBox || 10;
     const totalRaised = squares.reduce((acc, sq) => acc + (sq.paidAmount || 0), 0);
-    const potentialTotal = 100 * costPerBox;
+    const potentialTotal = pledgedTotal;
     const totalCommitted = assignedCount * costPerBox;
     
     return {
       assigned: assignedCount,
-      remaining: 100 - assignedCount,
+      remaining: (activePool?.type === 'squares' ? 100 : squares.length) - assignedCount,
       totalRaised,
       totalCommitted,
       potentialTotal
     };
-  }, [squares, settings.costPerBox]);
+  }, [squares, settings.costPerBox, pledgedTotal, activePool?.type]);
 
   const prizeBreakdown = useMemo(() => {
-    const { payouts, costPerBox } = settings;
-    const totalPot = 100 * costPerBox;
+    const { payouts } = settings;
 
     if (payouts.mode === 'scoreChange') {
       return {
         isScoreChange: true,
         multiplier: payouts.scoreChangeMultiplier,
-        perChange: costPerBox * payouts.scoreChangeMultiplier,
-        charity: payouts.charityPayoutType === 'fixed' ? payouts.charityFixedAmount : (totalPot * (payouts.charityPercent / 100))
+        perChange: (settings.costPerBox || 10) * payouts.scoreChangeMultiplier,
+        charity: projectedCharity
       };
     }
 
-    let charityAmount = 0;
-    if (payouts.charityPayoutType === 'fixed') {
-      charityAmount = payouts.charityFixedAmount || 0;
-    } else {
-      charityAmount = totalPot * (payouts.charityPercent / 100);
-    }
-
-    const playerPot = totalPot - charityAmount;
-
     const calculatePrize = (val: number) => {
-      return payouts.standardPayoutType === 'fixed' ? val : (playerPot * (val / 100));
+      return payouts.standardPayoutType === 'fixed' ? val : (projectedPlayerPot * (val / 100));
     };
 
     return {
@@ -131,48 +143,50 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
       half: calculatePrize(payouts.standardSplits.half),
       q3: calculatePrize(payouts.standardSplits.q3),
       final: calculatePrize(payouts.standardSplits.final),
-      charity: charityAmount
+      charity: projectedCharity
     };
-  }, [settings]);
+  }, [settings, projectedPlayerPot, projectedCharity]);
 
   const liveWinners = useMemo(() => {
-    const { scores = [] } = activePool;
-    const { payouts, costPerBox, rowNumbers, colNumbers } = settings;
-    const totalPot = 100 * costPerBox;
-    
-    let charityAmount = 0;
-    if (payouts.charityPayoutType === 'fixed') {
-      charityAmount = payouts.charityFixedAmount || 0;
-    } else {
-      charityAmount = totalPot * (payouts.charityPercent / 100);
-    }
-    
-    const payoutPot = totalPot - charityAmount;
+    const { scores = [] } = activePool || {};
+    const { rowNumbers, colNumbers } = settings;
 
-    return (scores || []).map((s, index) => {
+    const totals = new Map<string, {
+      winner: string;
+      totalPayout: number;
+      labels: string[];
+      latestScore: string;
+    }>();
+
+    (scores || []).forEach((s, index) => {
       const lastDigitA = s.teamAScore % 10;
       const lastDigitB = s.teamBScore % 10;
       const rowIndex = (rowNumbers || []).indexOf(lastDigitA);
       const colIndex = (colNumbers || []).indexOf(lastDigitB);
       
       const winnerSquare = squares.find(sq => sq.row === rowIndex && sq.col === colIndex);
+      const winnerName = winnerSquare?.assigned ? winnerSquare.alias : (winnerSquare ? 'UNCLAIMED' : 'PENDING');
       
-      let payout = 0;
-      if (payouts.mode === 'standard') {
-        if (payouts.standardPayoutType === 'fixed') {
-          payout = payouts.standardSplits[s.label.toLowerCase() as keyof typeof payouts.standardSplits] || 0;
-        } else {
-          const split = payouts.standardSplits[s.label.toLowerCase() as keyof typeof payouts.standardSplits] || 0;
-          payout = payoutPot * (split / 100);
-        }
-      } else {
-        const isZeroZero = s.teamAScore === 0 && s.teamBScore === 0;
-        const previousZeroZero = scores.slice(0, index).some(prev => prev.teamAScore === 0 && prev.teamBScore === 0);
-        payout = (isZeroZero && !previousZeroZero) ? costPerBox : (costPerBox * (payouts.scoreChangeMultiplier || 3));
-      }
+      const payout = solvePayoutForEntry(s, index, scores, settings, projectedPlayerPot);
 
-      return { label: s.label, score: `${s.teamAScore}-${s.teamBScore}`, winner: winnerSquare?.assigned ? winnerSquare.alias : (winnerSquare ? 'UNCLAIMED' : 'PENDING'), payout };
-    }).reverse();
+      const key = winnerName;
+      const existing = totals.get(key);
+      if (existing) {
+        existing.totalPayout += payout;
+        if (!existing.labels.includes(s.label)) existing.labels.push(s.label);
+      } else {
+        totals.set(key, {
+          winner: winnerName,
+          totalPayout: payout,
+          labels: [s.label],
+          latestScore: `${s.teamAScore}-${s.teamBScore}`
+        });
+      }
+    });
+
+    return Array.from(totals.values())
+      .map(w => ({ ...w, label: w.labels.join(' + ') }))
+      .sort((a, b) => b.totalPayout - a.totalPayout);
   }, [activePool.scores, settings, squares]);
 
   const handleStandardPrint = () => {
@@ -227,34 +241,6 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
     setShowExportMenu(false);
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      const dist = Math.hypot(
-        e.touches[0].pageX - e.touches[1].pageX,
-        e.touches[0].pageY - e.touches[1].pageY
-      );
-      lastTouchDist.current = dist;
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 2 && lastTouchDist.current !== null) {
-      const dist = Math.hypot(
-        e.touches[0].pageX - e.touches[1].pageX,
-        e.touches[0].pageY - e.touches[1].pageY
-      );
-      const delta = dist / lastTouchDist.current;
-      setZoom(prev => {
-        const nextZoom = Math.min(Math.max(0.1, prev * delta), 2.5);
-        return parseFloat(nextZoom.toFixed(2));
-      });
-      lastTouchDist.current = dist;
-    }
-  };
-
-  const handleTouchEnd = () => {
-    lastTouchDist.current = null;
-  };
 
   const LABEL_WIDTH_CLASS = "w-28 md:w-40"; 
   const ROW_NUM_WIDTH_CLASS = "w-14 md:w-28"; 
@@ -266,16 +252,15 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
     <div className="flex flex-col items-center w-full relative">
       <div 
         ref={gridRef} 
-        className="w-full overflow-auto max-h-[85vh] pb-8 mb-4 touch-pan-x touch-pan-y custom-scrollbar print:overflow-visible relative flex justify-center" 
-        onTouchStart={handleTouchStart} 
-        onTouchMove={handleTouchMove} 
-        onTouchEnd={handleTouchEnd}
+        className="w-full overflow-hidden pb-4 print:overflow-visible relative flex justify-center" 
       >
         <div 
-          className="inline-block p-4 print:p-0 min-w-max transition-transform duration-300 origin-top" 
-          style={{ transform: `scale(${zoom})` }}
+          className="inline-block p-4 print:p-0 min-w-max print:zoom-100" 
+          style={{ zoom: zoom }}
         >
-          <div className="grid-inner-content flex flex-col">
+          <div className="grid-inner-content flex flex-col print:scale-100 print:transform-none">
+              <div className={`${LEFT_SPACER_CLASS} flex-shrink-0`}></div>
+
             <div className="flex items-end">
               <div className={`${LEFT_SPACER_CLASS} flex-shrink-0`}></div>
               <div className="flex flex-col items-center w-full">
@@ -412,12 +397,6 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
                )}
             </div>
 
-            <div className="flex items-center gap-1 bg-white p-2 rounded-2xl border-2 border-indigo-50 shadow-sm print-hidden">
-               <button onClick={() => setZoom(prev => Math.max(0.1, prev - 0.1))} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-xl text-indigo-900 hover:bg-indigo-50"><i className="fas fa-minus text-[10px]"></i></button>
-               <div className="px-3 min-w-[60px] text-center"><span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">{Math.round(zoom * 100)}%</span></div>
-               <button onClick={() => setZoom(prev => Math.min(2.5, prev + 0.1))} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-xl text-indigo-900 hover:bg-indigo-50"><i className="fas fa-plus text-[10px]"></i></button>
-               <button onClick={() => setZoom(1)} className="ml-1 px-3 py-2 text-[8px] font-black uppercase text-indigo-400">1:1</button>
-            </div>
          </div>
 
          {pendingSelection.length > 0 && (
@@ -440,7 +419,7 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
             <div>
               <p className="text-indigo-300 text-[9px] font-black uppercase tracking-widest">Charity Impact Goal</p>
               <h3 className="text-xl font-black text-white uppercase leading-none mt-1 whitespace-nowrap">
-                ${stats.totalRaised} <span className="text-indigo-400">/ ${stats.potentialTotal} Raised</span>
+                {formatMoney(stats.totalRaised)} <span className="text-indigo-400">/ {formatMoney(stats.potentialTotal)} Raised</span>
               </h3>
             </div>
           </div>
@@ -490,12 +469,16 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
 
           <div className="flex flex-wrap justify-center md:justify-end gap-3 flex-shrink-0 z-10">
              <div className="px-4 py-2 bg-white/5 rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] backdrop-blur-sm">
-                <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Money Committed</span>
-                <span className="text-base font-black text-indigo-200">${stats.totalCommitted}</span>
+                <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Money Pledged</span>
+                <span className="text-base font-black text-indigo-200">{formatMoney(stats.totalCommitted)}</span>
              </div>
              <div className="px-4 py-2 bg-white/5 rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] backdrop-blur-sm">
                 <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Raised So Far</span>
-                <span className="text-base font-black text-white">${stats.totalRaised}</span>
+                <span className="text-base font-black text-white">{formatMoney(stats.totalRaised)}</span>
+             </div>
+             <div className="px-4 py-2 bg-white/5 rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] backdrop-blur-sm shadow-lg border-indigo-500/30 bg-indigo-500/5">
+                <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Winners Total</span>
+                <span className="text-base font-black text-indigo-300">{formatMoney(actualWinnersTotal)}</span>
              </div>
              <div className="px-4 py-2 bg-white/5 rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] backdrop-blur-sm">
                 <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Boxes Left</span>
@@ -503,7 +486,7 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
              </div>
              <div className="px-4 py-2 bg-white/10 rounded-2xl border border-white/20 flex flex-col items-center min-w-[90px] backdrop-blur-sm bg-indigo-500/10">
                 <span className="text-[8px] font-black text-indigo-200 uppercase tracking-widest">Cost/Box</span>
-                <span className="text-base font-black text-white">${settings.costPerBox}</span>
+                <span className="text-base font-black text-white">{formatMoney(settings.costPerBox || 10)}</span>
              </div>
           </div>
         </div>
@@ -540,8 +523,11 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
 
           <div className="bg-white border-2 border-green-100 p-6 md:p-8 rounded-[2rem] shadow-sm relative overflow-hidden">
              <div className="absolute -top-4 -right-4 opacity-5 rotate-12"><i className="fas fa-trophy text-6xl text-green-600"></i></div>
-             <h3 className="font-black text-indigo-900 uppercase tracking-tight text-xs md:text-sm mb-6 flex items-center gap-2 relative z-10">
-                <i className="fas fa-trophy text-green-500"></i> Live Winner Breakdown
+             <h3 className="font-black text-indigo-900 uppercase tracking-tight text-xs md:text-sm mb-6 flex items-center justify-between gap-2 relative z-10">
+                <span className="flex items-center gap-2">
+                  <i className="fas fa-trophy text-green-500"></i> Live Winner Breakdown
+                </span>
+                <span className="text-indigo-400 font-bold leading-none">Total Winnings: {formatMoney(actualWinnersTotal)}</span>
              </h3>
              {liveWinners.length === 0 ? (
                <div className="h-24 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-2xl">
@@ -556,8 +542,8 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
                           <span className="text-xs font-black text-indigo-900">{w.winner}</span>
                        </div>
                        <div className="text-right">
-                          <p className="text-[10px] font-black text-gray-950">${w.payout.toFixed(0)}</p>
-                          <p className="text-[7px] font-bold text-gray-400 uppercase leading-none mt-0.5">Score: {w.score}</p>
+                          <p className="text-[10px] font-black text-gray-950">{formatMoney(w.totalPayout)}</p>
+                          <p className="text-[7px] font-bold text-gray-400 uppercase leading-none mt-0.5">Score: {w.latestScore}</p>
                     </div>
                     </div>
                   ))}

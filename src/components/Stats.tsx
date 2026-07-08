@@ -1,13 +1,20 @@
 
 import React, { useMemo, useState } from 'react';
-import { Square, GameSettings, Participant, PaymentTransaction } from '../types';
+import { Square, GameSettings, Participant, PaymentTransaction, ScoreEntry, Pool, ThirteenRunData } from '../types';
+import { solvePayoutForEntry, calculateFinancialSummary, parseCustomPayoutValue } from '../utils/finance';
+
+const WINNINGS_PAYMENT_METHODS = ['Cash', 'Venmo', 'PayPal', 'Zelle', 'Other'];
 
 interface StatsProps {
+  activePool: Pool | null;
   squares: Square[];
   participants: Participant[];
   settings: GameSettings;
+  scores: ScoreEntry[];
+  poolName?: string;
   onUpdateSquare: (id: number, updates: Partial<Square>) => void;
   onUpdateParticipant: (id: string, updates: Partial<Participant>) => void;
+  onUpdateScore: (score: ScoreEntry) => void;
   onUnassignSquare: (id: number) => void;
   onClearUserBoxes: (participantId: string) => void;
   onApplyPayment: (participantId: string, amount: number, method: string, note?: string) => void;
@@ -15,12 +22,16 @@ interface StatsProps {
   onDeletePayment: (participantId: string, transactionId: string) => void;
 }
 
-const Stats: React.FC<StatsProps> = ({ 
-  squares, 
-  participants, 
-  settings, 
-  onUpdateSquare, 
+const Stats: React.FC<StatsProps> = ({
+  activePool,
+  squares,
+  participants,
+  settings,
+  scores,
+  poolName,
+  onUpdateSquare,
   onUpdateParticipant,
+  onUpdateScore,
   onUnassignSquare,
   onClearUserBoxes,
   onApplyPayment,
@@ -29,42 +40,138 @@ const Stats: React.FC<StatsProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentModalParticipant, setPaymentModalParticipant] = useState<any | null>(null);
-  const [historyModalParticipant, setHistoryModalParticipant] = useState<any | null>(null);
-  const [manageBoxesParticipant, setManageBoxesParticipant] = useState<any | null>(null);
   const [editModalParticipant, setEditModalParticipant] = useState<Participant | null>(null);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [paymentNote, setPaymentNote] = useState('');
+  const [editingWinningsTransactionId, setEditingWinningsTransactionId] = useState<string | null>(null);
+  const [winningsPayoutAmount, setWinningsPayoutAmount] = useState('');
+  const [winningsPayoutMethod, setWinningsPayoutMethod] = useState('Cash');
+  const [winningsPayoutNote, setWinningsPayoutNote] = useState('');
 
-  const [editFormData, setEditFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    alias: ''
-  });
+  const [editFormData, setEditFormData] = useState({ name: '', email: '', phone: '', alias: '' });
+
+  const getParticipantAlias = (participant: Participant) => String(participant.alias || '').trim().toUpperCase();
 
   const costPerBox = settings?.costPerBox || 10;
   const safeParticipants = useMemo(() => participants || [], [participants]);
   const safeSquares = useMemo(() => squares || [], [squares]);
 
+  const { totalPot, projectedPlayerPot } = useMemo(() => {
+    return calculateFinancialSummary(activePool, settings, scores, squares);
+  }, [activePool, settings, scores, squares]);
+
+  const resolvedWinningEntries = useMemo<Array<{ participantId: string; entry: ScoreEntry; payout: number; paidOut: number; paymentMethod: string }>>(() => {
+    if (activePool?.type !== 'squares') return [];
+
+    const rowNumbers = settings?.rowNumbers || [];
+    const colNumbers = settings?.colNumbers || [];
+    const resolvedEntries: Array<{ participantId: string; entry: ScoreEntry; payout: number; paidOut: number; paymentMethod: string; }> = [];
+
+    scores.forEach((entry, index) => {
+      const lastDigitA = entry.teamAScore % 10;
+      const lastDigitB = entry.teamBScore % 10;
+      const rowIndex = rowNumbers.indexOf(lastDigitA);
+      const colIndex = colNumbers.indexOf(lastDigitB);
+      if (rowIndex === -1 || colIndex === -1) return;
+
+      const winningSquare = safeSquares.find(square => square.row === rowIndex && square.col === colIndex);
+      const participantId = winningSquare?.participantId;
+      if (!participantId) return;
+
+      const payout = solvePayoutForEntry(entry, index, scores, settings, projectedPlayerPot);
+
+      resolvedEntries.push({
+        participantId,
+        entry,
+        payout: payout || 0,
+        paidOut: entry.amountPaidTowardWinnings || 0,
+        paymentMethod: entry.winningsPaymentMethod || '',
+      });
+    });
+
+    return resolvedEntries;
+  }, [activePool?.type, safeSquares, scores, settings, projectedPlayerPot]);
+
+  const participantWinnings = useMemo(() => {
+    const totals = new Map<string, number>();
+    resolvedWinningEntries.forEach(({ participantId, payout }) => {
+      totals.set(participantId, (totals.get(participantId) || 0) + payout);
+    });
+    return totals;
+  }, [resolvedWinningEntries]);
+
+  const participantWinningsPaidOut = useMemo(() => {
+    const totals = new Map<string, number>();
+    safeParticipants.forEach(participant => {
+      const payoutHistoryTotal = (participant.winningsPayoutHistory || []).reduce((sum, transaction) => sum + transaction.amount, 0);
+      if (payoutHistoryTotal > 0) {
+        totals.set(participant.id, payoutHistoryTotal);
+      }
+    });
+
+    resolvedWinningEntries.forEach(({ participantId, paidOut }) => {
+      if (totals.has(participantId)) return;
+      totals.set(participantId, (totals.get(participantId) || 0) + paidOut);
+    });
+    return totals;
+  }, [resolvedWinningEntries, safeParticipants]);
+
+  const participantWinningEntries = useMemo(() => {
+    const grouped = new Map<string, Array<{ entry: ScoreEntry; payout: number; paidOut: number; paymentMethod: string }>>();
+    resolvedWinningEntries.forEach(({ participantId, entry, payout, paidOut, paymentMethod }) => {
+      const existing = grouped.get(participantId) || [];
+      existing.push({ entry, payout, paidOut, paymentMethod });
+      grouped.set(participantId, existing);
+    });
+
+    grouped.forEach((entries, participantId) => {
+      grouped.set(participantId, entries.sort((left, right) => right.entry.timestamp - left.entry.timestamp));
+    });
+
+    return grouped;
+  }, [resolvedWinningEntries]);
+
   const roster = useMemo(() => {
     return safeParticipants.map(p => {
-      const userSquares = safeSquares.filter(s => s.participantId === p.id);
+      let entryCount = 0;
+      if (activePool?.type === '13run') {
+        entryCount = Object.values((activePool.gameData as ThirteenRunData)?.entries || {}).filter(e => e.participantId === p.id).length;
+      } else if (activePool?.type === 'survivor') {
+        entryCount = 1; // Generic 1 entry per participant for survivor unless otherwise specified
+      } else {
+        entryCount = safeSquares.filter(s => s.participantId === p.id).length;
+      }
+
       const totalPaid = (p.paymentHistory || []).reduce((sum, t) => sum + t.amount, 0);
-      const totalOwed = userSquares.length * costPerBox;
+      const totalOwed = entryCount * costPerBox;
+      const totalWon = participantWinnings.get(p.id) || 0;
+      const winningsPaidOut = participantWinningsPaidOut.get(p.id) || 0;
+      const paidOutEntries = (p.winningsPayoutHistory || []).length > 0
+        ? (p.winningsPayoutHistory || []).filter(entry => entry.amount > 0).map(entry => ({ paymentMethod: entry.method }))
+        : (participantWinningEntries.get(p.id) || []).filter(entry => entry.paidOut > 0);
+      const singleWinningsPaymentMethod = paidOutEntries.length === 1
+        ? (paidOutEntries[0].paymentMethod || '')
+        : '';
+      const netOwed = Math.max(0, totalOwed - totalPaid - totalWon);
+
       return {
         ...p,
-        boxCount: userSquares.length,
+        entryCount,
         totalPaid,
         totalOwed,
-        squareIds: userSquares.map(s => s.id),
+        totalWon,
+        winningsPaidOut,
+        singleWinningsPaymentMethod,
+        netOwed,
+        squareIds: activePool?.type === 'squares' ? safeSquares.filter(s => s.participantId === p.id).map(s => s.id) : [],
       };
     }).sort((a, b) => (a.alias || '').localeCompare(b.alias || ''));
-  }, [safeSquares, safeParticipants, costPerBox]);
+  }, [safeSquares, safeParticipants, costPerBox, activePool, participantWinnings, participantWinningsPaidOut, participantWinningEntries]);
 
   const allTransactions = useMemo(() => {
-    const txs: { pAlias: string, pName: string, pEmail: string, pPhone: string, pId: string, t: PaymentTransaction }[] = [];
+    const txs: any[] = [];
     roster.forEach(p => {
       (p.paymentHistory || []).forEach(t => {
         txs.push({ pAlias: p.alias, pName: p.name, pEmail: p.email, pPhone: p.phone, pId: p.id, t });
@@ -74,7 +181,7 @@ const Stats: React.FC<StatsProps> = ({
   }, [roster]);
 
   const totals = useMemo(() => {
-    const totalPotential = safeSquares.filter(s => s.assigned).length * costPerBox;
+    const totalPotential = totalPot;
     const totalCollected = roster.reduce((sum, p) => sum + (p.totalPaid || 0), 0);
     return {
       totalDue: totalPotential,
@@ -82,48 +189,24 @@ const Stats: React.FC<StatsProps> = ({
       outstanding: Math.max(0, totalPotential - totalCollected),
       percentCollected: totalPotential > 0 ? (totalCollected / totalPotential) * 100 : 0
     };
-  }, [safeSquares, costPerBox, roster]);
+  }, [totalPot, roster]);
 
-  const filteredRoster = roster.filter(p => 
-    (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filteredRoster = roster.filter(p =>
+    (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.alias || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleExportCSV = () => {
-    if (allTransactions.length === 0) return;
-    const headers = ["Timestamp", "Alias", "Full Name", "Email", "Phone", "Amount", "Method"];
-    const rows = allTransactions.map(({ pAlias, pName, pEmail, pPhone, t }) => [
-      new Date(t.timestamp).toLocaleString().replace(',', ''), pAlias, pName, pEmail, pPhone, t.amount.toFixed(2), t.method
-    ]);
-    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `payouts_audit_${new Date().toISOString().split('T')[0]}.csv`);
-    link.click();
-  };
+  const selectedParticipantStats = editModalParticipant
+    ? roster.find(participant => participant.id === editModalParticipant.id)
+    : null;
 
   const openAddPaymentModal = (p: any) => {
-    const balance = Math.max(0, (p.totalOwed || 0) - (p.totalPaid || 0));
+    const balance = Math.max(0, p.netOwed || 0);
     setPaymentModalParticipant(p);
     setEditingTransactionId(null);
     setPaymentAmount(balance > 0 ? balance.toString() : '');
     setPaymentMethod('Cash');
     setPaymentNote('');
-  };
-
-  const openEditPaymentModal = (p: any, t: PaymentTransaction) => {
-    setPaymentModalParticipant(p);
-    setEditingTransactionId(t.id);
-    setPaymentAmount(t.amount.toString());
-    setPaymentMethod(t.method);
-    setPaymentNote(t.note || '');
-  };
-
-  const openEditParticipantModal = (p: Participant) => {
-    setEditModalParticipant(p);
-    setEditFormData({ name: p.name, email: p.email, phone: p.phone, alias: p.alias.toUpperCase() });
   };
 
   const handleConfirmPayment = (e: React.FormEvent) => {
@@ -139,28 +222,100 @@ const Stats: React.FC<StatsProps> = ({
     }
   };
 
-  const handleConfirmEditParticipant = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editModalParticipant) return;
-    onUpdateParticipant(editModalParticipant.id, { ...editFormData, alias: editFormData.alias.toUpperCase() });
-    setEditModalParticipant(null);
+  const openEditParticipantModal = (participant: Participant & { totalWon?: number; winningsPaidOut?: number; netOwed?: number; entryCount?: number }) => {
+    setEditModalParticipant(participant);
+    setEditFormData({
+      name: participant.name || '',
+      email: participant.email || '',
+      phone: participant.phone || '',
+      alias: participant.alias || '',
+    });
+    setEditingWinningsTransactionId(null);
+    setWinningsPayoutAmount('');
+    setWinningsPayoutMethod('Cash');
+    setWinningsPayoutNote('');
   };
 
-  const handleDeleteTransactionInModal = () => {
-    if (!paymentModalParticipant || !editingTransactionId) return;
-    if (window.confirm(`Delete this $${paymentAmount} entry for ${paymentModalParticipant.alias}?`)) {
-      onDeletePayment(paymentModalParticipant.id, editingTransactionId);
-      setPaymentModalParticipant(null);
-      setEditingTransactionId(null);
+  const handleSaveParticipant = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editModalParticipant) return;
+    onUpdateParticipant(editModalParticipant.id, {
+      name: editFormData.name.trim(),
+      email: editFormData.email.trim(),
+      phone: editFormData.phone.trim(),
+      alias: editFormData.alias.trim().toUpperCase(),
+    });
+    setEditModalParticipant(null);
+    setEditingWinningsTransactionId(null);
+    setWinningsPayoutAmount('');
+    setWinningsPayoutMethod('Cash');
+    setWinningsPayoutNote('');
+  };
+
+  const handleEditWinningsTransaction = (transaction: PaymentTransaction) => {
+    setEditingWinningsTransactionId(transaction.id);
+    setWinningsPayoutAmount(String(transaction.amount));
+    setWinningsPayoutMethod(transaction.method || 'Cash');
+    setWinningsPayoutNote(transaction.note || '');
+  };
+
+  const handleDeleteWinningsTransaction = (transactionId: string) => {
+    if (!editModalParticipant) return;
+    onUpdateParticipant(editModalParticipant.id, {
+      winningsPayoutHistory: (editModalParticipant.winningsPayoutHistory || []).filter(transaction => transaction.id !== transactionId)
+    });
+    setEditModalParticipant({
+      ...editModalParticipant,
+      winningsPayoutHistory: (editModalParticipant.winningsPayoutHistory || []).filter(transaction => transaction.id !== transactionId)
+    });
+    if (editingWinningsTransactionId === transactionId) {
+      setEditingWinningsTransactionId(null);
+      setWinningsPayoutAmount('');
+      setWinningsPayoutMethod('Cash');
+      setWinningsPayoutNote('');
     }
   };
 
-  const formatPhoneNumber = (value: string) => {
-    const phoneNumber = value.replace(/[^\d]/g, '');
-    const len = phoneNumber.length;
-    if (len < 4) return phoneNumber;
-    if (len < 7) return `(${phoneNumber.slice(0, 3)}) ${phoneNumber.slice(3)}`;
-    return `(${phoneNumber.slice(0, 3)}) ${phoneNumber.slice(3, 6)}-${phoneNumber.slice(6, 10)}`;
+  const handleSaveWinningsPayout = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editModalParticipant) return;
+    const amount = parseCustomPayoutValue(winningsPayoutAmount);
+    if (amount === undefined) return;
+
+    const noteRaw = winningsPayoutNote.trim();
+
+    const nextTransaction: PaymentTransaction = {
+      id: editingWinningsTransactionId || crypto.randomUUID(),
+      amount,
+      method: winningsPayoutMethod,
+      timestamp: Date.now(),
+    };
+    if (noteRaw) {
+      nextTransaction.note = noteRaw;
+    }
+
+    const existingHistory = editModalParticipant.winningsPayoutHistory || [];
+    const winningsPayoutHistory = editingWinningsTransactionId
+      ? existingHistory.map(transaction => {
+          if (transaction.id === editingWinningsTransactionId) {
+            const updated = { ...transaction, amount, method: winningsPayoutMethod };
+            if (noteRaw) {
+              updated.note = noteRaw;
+            } else {
+              delete updated.note;
+            }
+            return updated;
+          }
+          return transaction;
+        })
+      : [...existingHistory, nextTransaction];
+
+    onUpdateParticipant(editModalParticipant.id, { winningsPayoutHistory });
+    setEditModalParticipant({ ...editModalParticipant, winningsPayoutHistory });
+    setEditingWinningsTransactionId(null);
+    setWinningsPayoutAmount('');
+    setWinningsPayoutMethod('Cash');
+    setWinningsPayoutNote('');
   };
 
   return (
@@ -168,26 +323,26 @@ const Stats: React.FC<StatsProps> = ({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
         <div className="bg-indigo-900 p-4 md:p-6 rounded-2xl md:rounded-3xl text-white shadow-xl">
           <p className="text-indigo-300 text-[8px] md:text-xs font-black uppercase tracking-widest mb-1">Total Pledged</p>
-          <p className="text-xl md:text-4xl font-black">${totals.totalDue}</p>
+          <p className="text-xl md:text-4xl font-black">${totals.totalDue.toFixed(2)}</p>
         </div>
         <div className="bg-white border-2 border-green-500/10 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-lg">
           <p className="text-green-600 text-[8px] md:text-xs font-black uppercase tracking-widest mb-1">Collected</p>
-          <p className="text-xl md:text-4xl font-black text-gray-900">${totals.totalCollected}</p>
+          <p className="text-xl md:text-4xl font-black text-gray-900">${totals.totalCollected.toFixed(2)}</p>
         </div>
         <div className="bg-white border-2 border-orange-500/10 p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-lg">
           <p className="text-orange-600 text-[8px] md:text-xs font-black uppercase tracking-widest mb-1">Outstanding</p>
-          <p className="text-xl md:text-4xl font-black text-gray-900">${totals.outstanding}</p>
+          <p className="text-xl md:text-4xl font-black text-gray-900">${totals.outstanding.toFixed(2)}</p>
         </div>
         <div className="bg-indigo-50 p-4 md:p-6 rounded-2xl md:rounded-3xl flex items-center justify-center gap-2">
-           <span className="text-xl md:text-2xl font-black text-indigo-900">{Math.round(totals.percentCollected)}%</span>
-           <span className="text-[7px] md:text-[9px] font-black text-gray-400 uppercase leading-none">Goal<br/>Progress</span>
+          <span className="text-xl md:text-2xl font-black text-indigo-900">{Math.round(totals.percentCollected)}%</span>
+          <span className="text-[7px] md:text-[9px] font-black text-gray-400 uppercase leading-none">Goal<br />Progress</span>
         </div>
       </div>
 
       <div className="bg-white border border-gray-100 rounded-2xl md:rounded-[2.5rem] overflow-hidden shadow-xl">
-        <div className="p-4 md:p-8 border-b bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
-          <h3 className="text-lg md:text-xl font-black text-gray-900 uppercase">Participant Roster</h3>
-          <div className="relative w-full md:w-64">
+        <div className="p-4 md:p-8 border-b bg-gray-50 flex items-center justify-between">
+          <h3 className="text-lg md:text-xl font-black text-gray-900 uppercase">Participants & Contributions</h3>
+          <div className="relative w-64">
             <input type="text" placeholder="Filter names..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-4 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
           </div>
         </div>
@@ -196,31 +351,37 @@ const Stats: React.FC<StatsProps> = ({
             <thead>
               <tr className="bg-gray-50 text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">
                 <th className="px-4 md:px-8 py-3 md:py-5">Player</th>
-                <th className="px-4 md:px-8 py-3 md:py-5">Money Status</th>
+                <th className="px-4 md:px-8 py-3 md:py-5">Financial Status</th>
                 <th className="px-4 md:px-8 py-3 md:py-5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filteredRoster.map((p) => {
-                const balance = Math.max(0, (p.totalOwed || 0) - (p.totalPaid || 0));
+                const balance = Math.max(0, p.netOwed || 0);
                 return (
                   <tr key={p.id} className="hover:bg-indigo-50 transition-colors">
                     <td className="px-4 md:px-8 py-4">
-                      <p className="font-black text-xs md:text-sm text-gray-900 truncate max-w-[120px]">{p.alias.toUpperCase() || 'GUEST'}</p>
-                      <p className="text-[9px] text-gray-400 font-bold uppercase">{p.boxCount || 0} Boxes</p>
+                      <div className="space-y-1 max-w-[180px]">
+                        <p className="font-black text-xs md:text-sm text-gray-900 truncate">{p.name || 'Player'}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[9px] text-indigo-600 font-black uppercase tracking-widest">{getParticipantAlias(p) || 'NO ALIAS'}</span>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase">{p.entryCount} Entries</span>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 md:px-8 py-4">
                       <div className="flex flex-col">
-                        <span className={`text-xs md:text-sm font-black ${balance === 0 ? 'text-green-600' : 'text-indigo-900'}`}>${p.totalPaid || 0}</span>
-                        {balance > 0 && <span className="text-[8px] text-red-500 font-bold uppercase">Due: ${balance}</span>}
+                        <span className="text-xs md:text-sm font-black text-indigo-900">Paid: ${p.totalPaid.toFixed(2)}</span>
+                        <span className="text-[8px] text-emerald-600 font-bold uppercase">Won: ${p.totalWon.toFixed(2)}</span>
+                        <span className="text-[8px] text-indigo-500 font-bold uppercase">Paid Out: ${p.winningsPaidOut.toFixed(2)}</span>
+                        {p.singleWinningsPaymentMethod && <span className="text-[8px] text-sky-600 font-bold uppercase">Paid Out Via: {p.singleWinningsPaymentMethod}</span>}
+                        <span className={`text-[8px] font-bold uppercase ${balance > 0 ? 'text-red-500' : 'text-green-600'}`}>Owed: ${balance.toFixed(2)}</span>
                       </div>
                     </td>
                     <td className="px-4 md:px-8 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => setManageBoxesParticipant(p)} className="bg-orange-50 text-orange-600 w-10 h-10 rounded-xl flex items-center justify-center hover:bg-orange-500 hover:text-white transition-all shadow-sm" title="Manage Boxes"><i className="fas fa-th text-xs"></i></button>
-                        <button onClick={() => openEditParticipantModal(p)} className="bg-gray-100 text-gray-500 w-10 h-10 rounded-xl flex items-center justify-center hover:bg-indigo-900 hover:text-white transition-all shadow-sm" title="Edit Profile"><i className="fas fa-user-edit text-xs"></i></button>
-                        <button onClick={() => setHistoryModalParticipant(p)} className="bg-indigo-50 text-indigo-500 w-10 h-10 rounded-xl flex items-center justify-center hover:bg-indigo-500 hover:text-white transition-all shadow-sm" title="Payment History"><i className="fas fa-history text-xs"></i></button>
-                        <button onClick={() => openAddPaymentModal(p)} className="bg-green-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow-lg shadow-green-100"><i className="fas fa-plus mr-1"></i> Add</button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button onClick={() => openEditParticipantModal(p)} className="bg-white text-indigo-900 px-4 py-2 rounded-xl text-[9px] font-black uppercase border border-indigo-100 shadow-sm hover:bg-indigo-50 transition-all">Manage</button>
+                        <button onClick={() => openAddPaymentModal(p)} className="bg-indigo-900 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow-lg hover:bg-black transition-all">Add Payment</button>
                       </div>
                     </td>
                   </tr>
@@ -231,130 +392,149 @@ const Stats: React.FC<StatsProps> = ({
         </div>
       </div>
 
-      <section className="space-y-6">
-        <div className="flex items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-             <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center"><i className="fas fa-receipt text-xs"></i></div>
-             <h3 className="text-sm font-black text-indigo-900 uppercase tracking-widest">Global Audit Trail</h3>
-          </div>
-          <button type="button" onClick={handleExportCSV} disabled={allTransactions.length === 0} className="bg-indigo-900 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg hover:bg-black transition-all flex items-center gap-2 disabled:opacity-50">
-            <i className="fas fa-file-csv"></i> Export CSV
-          </button>
-        </div>
-        <div className="bg-white border border-gray-100 rounded-[2rem] md:rounded-[2.5rem] shadow-xl overflow-hidden">
-          {allTransactions.length === 0 ? (
-            <div className="py-20 text-center"><i className="fas fa-receipt text-gray-200 text-4xl mb-4"></i><p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">No transactions recorded</p></div>
-          ) : (
-            <div className="divide-y divide-gray-50 max-h-[500px] overflow-y-auto scrollbar-hide">
-              {allTransactions.map(({ pAlias, pId, t }) => (
-                <div key={t.id} className="p-5 md:p-6 flex flex-col hover:bg-indigo-50 transition-all group cursor-pointer" onClick={() => { const p = roster.find(r => r.id === pId); if (p) openEditPaymentModal(p, t); }}>
-                   <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 flex-grow">
-                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0 ${t.method === 'Venmo' ? 'bg-blue-50 text-blue-500' : t.method === 'PayPal' ? 'bg-[#003087] text-white' : t.method === 'Cash' ? 'bg-green-50 text-green-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                            <i className={`fas ${t.method === 'Venmo' ? 'fa-vimeo-v' : t.method === 'PayPal' ? 'fa-paypal' : t.method === 'Cash' ? 'fa-money-bill-wave' : 'fa-credit-card'} text-xs`}></i>
-                         </div>
-                         <div className="min-w-0">
-                            <p className="text-xs font-black text-indigo-900 uppercase">{pAlias.toUpperCase()}</p>
-                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{t.method} • {new Date(t.timestamp).toLocaleString()}</p>
-                         </div>
-                      </div>
-                      <div className="text-right flex items-center gap-4 flex-shrink-0"><div className="flex flex-col items-end"><p className="text-sm md:text-base font-black text-indigo-900">${t.amount.toFixed(2)}</p></div><i className="fas fa-chevron-right text-gray-200 text-xs"></i></div>
-                   </div>
-                   {t.note && <p className="text-[9px] text-gray-500 italic mt-2 ml-14">{t.note}</p>}
-                </div>
-              ))}
+      {paymentModalParticipant && (
+        <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-indigo-950/60 backdrop-blur-md">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className={`p-6 text-white bg-indigo-900 flex justify-between items-center`}>
+              <div>
+                <h3 className="font-black uppercase text-sm">Add Payment Log</h3>
+                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mt-1">
+                  {paymentModalParticipant.name || 'Player'}
+                  {paymentModalParticipant.alias ? ` (${String(paymentModalParticipant.alias).toUpperCase()})` : ''}
+                </p>
+              </div>
+              <button type="button" title="Close payment modal" aria-label="Close payment modal" onClick={() => setPaymentModalParticipant(null)}><i className="fas fa-times"></i></button>
             </div>
-          )}
-        </div>
-      </section>
-
-      {historyModalParticipant && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-indigo-950/60 backdrop-blur-md">
-           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
-              <div className="bg-indigo-900 p-6 text-white flex justify-between items-center">
-                 <div>
-                    <h3 className="font-black uppercase text-sm">{historyModalParticipant.alias}'s History</h3>
-                    <p className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest mt-1">Total: ${historyModalParticipant.totalPaid}</p>
-                 </div>
-                 <button onClick={() => setHistoryModalParticipant(null)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"><i className="fas fa-times"></i></button>
-              </div>
-              <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3 scrollbar-hide">
-                 {!historyModalParticipant.paymentHistory || historyModalParticipant.paymentHistory.length === 0 ? <div className="py-12 text-center text-gray-400 italic text-xs">No transactions.</div> : (
-                    historyModalParticipant.paymentHistory.slice().reverse().map((t: PaymentTransaction) => (
-                       <div key={t.id} onClick={() => { setHistoryModalParticipant(null); openEditPaymentModal(historyModalParticipant, t); }} className="bg-gray-50 border border-gray-100 p-4 rounded-2xl flex flex-col group cursor-pointer hover:border-indigo-200 transition-all">
-                          <div className="flex items-center justify-between mb-2">
-                            <div>
-                               <p className="text-sm font-black text-indigo-900">${t.amount.toFixed(2)}</p>
-                               <div className="flex gap-2 mt-1"><span className="text-[8px] font-black uppercase text-gray-400 px-2 py-0.5 bg-gray-200 rounded-md">{t.method}</span><span className="text-[8px] font-black uppercase text-gray-400 px-2 py-0.5 bg-gray-200 rounded-md">{new Date(t.timestamp).toLocaleDateString()}</span></div>
-                            </div>
-                            <i className="fas fa-edit text-indigo-200 group-hover:text-indigo-500 transition-colors"></i>
-                          </div>
-                          {t.note && <p className="text-[9px] text-gray-600 italic mt-2 pt-2 border-t border-gray-200">{t.note}</p>}
-                       </div>
-                    ))
-                 )}
-              </div>
-              <div className="p-6 border-t border-gray-100"><button onClick={() => setHistoryModalParticipant(null)} className="w-full py-4 bg-gray-50 rounded-2xl font-black text-[10px] uppercase text-gray-400 tracking-widest hover:bg-gray-100 transition-all">Close</button></div>
-           </div>
-        </div>
-      )}
-
-      {manageBoxesParticipant && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-indigo-950/60 backdrop-blur-md">
-           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
-              <div className="bg-indigo-900 p-6 text-white flex justify-between items-center">
-                 <div>
-                    <h3 className="font-black uppercase text-sm">Manage {manageBoxesParticipant.alias}'s Boxes</h3>
-                    <p className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest mt-1">{manageBoxesParticipant.boxCount} box{manageBoxesParticipant.boxCount !== 1 ? 'es' : ''}</p>
-                 </div>
-                 <button onClick={() => setManageBoxesParticipant(null)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"><i className="fas fa-times"></i></button>
-              </div>
-              <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3 scrollbar-hide">
-                 <div className="flex justify-end mb-2">
-                    <button onClick={() => { onClearUserBoxes(manageBoxesParticipant.id); setManageBoxesParticipant(null); }} className="px-4 py-2 bg-red-50 text-red-500 font-black uppercase text-[8px] rounded-lg hover:bg-red-500 hover:text-white transition-all border border-red-100"><i className="fas fa-trash-alt mr-2"></i> Remove All Boxes</button>
-                 </div>
-                 {!manageBoxesParticipant.squareIds || manageBoxesParticipant.squareIds.length === 0 ? <div className="py-12 text-center text-gray-400 italic text-xs">No boxes assigned.</div> : (
-                    manageBoxesParticipant.squareIds.map((sid: number) => {
-                      const sq = safeSquares[sid];
-                      return (
-                        <div key={sid} className="bg-gray-50 border border-gray-100 p-4 rounded-2xl flex items-center justify-between">
-                           <div><p className="text-sm font-black text-indigo-900 uppercase">Box #{sid + 1}</p><div className="flex gap-2 mt-1"><span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${sq.paidAmount >= settings.costPerBox ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>${sq.paidAmount} Paid</span></div></div>
-                           <button onClick={() => onUnassignSquare(sid)} className="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm"><i className="fas fa-trash-alt text-xs"></i></button>
-                        </div>
-                      );
-                    })
-                 )}
-              </div>
-              <div className="p-6 border-t border-gray-100"><button onClick={() => setManageBoxesParticipant(null)} className="w-full py-4 bg-gray-50 rounded-2xl font-black text-[10px] uppercase text-gray-400 tracking-widest hover:bg-gray-100 transition-all">Close</button></div>
-           </div>
+            <form onSubmit={handleConfirmPayment} className="p-6 space-y-4">
+              <div><label htmlFor="payment-amount" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Amount ($)</label><input id="payment-amount" required autoFocus type="number" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="w-full p-4 bg-gray-50 rounded-xl font-black text-lg outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+              <div><label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Method</label><div className="grid grid-cols-2 gap-2">{['Cash', 'Venmo', 'PayPal', 'Other'].map(m => (<button key={m} type="button" onClick={() => setPaymentMethod(m)} className={`py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${paymentMethod === m ? 'bg-indigo-900 text-white' : 'bg-white text-gray-400'}`}>{m}</button>))}</div></div>
+              <button type="submit" className={`w-full bg-green-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl`}>Confirm Payment</button>
+            </form>
+          </div>
         </div>
       )}
 
       {editModalParticipant && (
-        <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-indigo-950/60 backdrop-blur-md">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
-            <div className="bg-indigo-900 p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase text-sm">Edit Participant</h3><button onClick={() => setEditModalParticipant(null)}><i className="fas fa-times"></i></button></div>
-            <form onSubmit={handleConfirmEditParticipant} className="p-6 space-y-4">
-              <div><label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Full Name</label><input required onFocus={e => e.target.select()} value={editFormData.name} onChange={e => setEditFormData({ ...editFormData, name: e.target.value })} className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-              <div><label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Email</label><input required type="email" onFocus={e => e.target.select()} value={editFormData.email} onChange={e => setEditFormData({ ...editFormData, email: e.target.value })} className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-              <div><label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Phone</label><input required type="tel" onFocus={e => e.target.select()} value={editFormData.phone} onChange={e => setEditFormData({ ...editFormData, phone: formatPhoneNumber(e.target.value) })} className="w-full p-3 bg-gray-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-              <div><label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Alias</label><input required maxLength={16} onFocus={e => e.target.select()} value={editFormData.alias} onChange={e => setEditFormData({ ...editFormData, alias: e.target.value.toUpperCase() })} className="w-full p-3 bg-indigo-50 border-none rounded-xl font-black text-indigo-900 uppercase text-sm outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-              <button type="submit" className="w-full bg-indigo-900 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl mt-4">Update Profile</button>
-            </form>
-          </div>
-        </div>
-      )}
+        <div className="fixed inset-0 z-[170] flex items-center justify-center p-4 bg-indigo-950/60 backdrop-blur-md">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-6 bg-indigo-900 text-white flex items-center justify-between">
+              <div>
+                <h3 className="font-black uppercase text-base">Manage Participant</h3>
+                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mt-1">
+                  {editModalParticipant.name || 'Player'}
+                  {editModalParticipant.alias ? ` (${String(editModalParticipant.alias).toUpperCase()})` : ''}
+                </p>
+              </div>
+              <button type="button" title="Close participant manager" aria-label="Close participant manager" onClick={() => { setEditModalParticipant(null); setEditingWinningsTransactionId(null); setWinningsPayoutAmount(''); setWinningsPayoutMethod('Cash'); setWinningsPayoutNote(''); }}><i className="fas fa-times"></i></button>
+            </div>
 
-      {paymentModalParticipant && (
-        <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-indigo-950/60 backdrop-blur-md">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden animate-in slide-in-from-bottom-6 max-h-[90vh] overflow-y-auto">
-            <div className={`p-6 text-white flex justify-between items-center sticky top-0 ${editingTransactionId ? 'bg-orange-500' : 'bg-indigo-900'}`}><h3 className="font-black uppercase text-sm">{editingTransactionId ? 'Edit Entry' : 'Add Entry'}</h3><button onClick={() => { setPaymentModalParticipant(null); setEditingTransactionId(null); setPaymentNote(''); }}><i className="fas fa-times"></i></button></div>
-            <form onSubmit={handleConfirmPayment} className="p-6 space-y-4">
-              <div><label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Amount ($)</label><input required autoFocus type="number" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="w-full p-4 bg-gray-50 rounded-xl font-black text-lg outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-              <div><label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Method</label><div className="grid grid-cols-2 gap-2">{['Cash', 'Venmo', 'PayPal', 'Zelle', 'Other'].map(m => (<button key={m} type="button" onClick={() => setPaymentMethod(m)} className={`py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${paymentMethod === m ? 'bg-indigo-900 border-indigo-900 text-white' : 'bg-white border-gray-100 text-gray-400'}`}>{m}</button>))}</div></div>
-              <div><label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Note (optional)</label><textarea value={paymentNote} onChange={e => setPaymentNote(e.target.value)} placeholder="e.g., 'Cash payment during meeting'" className="w-full p-3 bg-gray-50 rounded-xl font-medium text-sm outline-none focus:ring-2 focus:ring-indigo-500 resize-none" rows={3}></textarea></div>
-              <div className="flex flex-col gap-3 pt-4"><button type="submit" className={`w-full text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl ${editingTransactionId ? 'bg-orange-500' : 'bg-green-600'}`}>{editingTransactionId ? 'Save Changes' : 'Log Payment'}</button>{editingTransactionId && <button type="button" onClick={handleDeleteTransactionInModal} className="w-full bg-red-50 text-red-500 py-4 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-red-500 hover:text-white transition-all border border-red-100">Delete Entry</button>}</div>
-            </form>
+            <div className="p-6 space-y-6 overflow-y-auto">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded-2xl bg-indigo-50 p-4">
+                  <p className="text-[9px] font-black uppercase text-indigo-400">Entries</p>
+                  <p className="text-xl font-black text-indigo-950">{selectedParticipantStats?.entryCount || 0}</p>
+                </div>
+                <div className="rounded-2xl bg-emerald-50 p-4">
+                  <p className="text-[9px] font-black uppercase text-emerald-600">Won</p>
+                  <p className="text-xl font-black text-emerald-700">${(selectedParticipantStats?.totalWon || 0).toFixed(2)}</p>
+                </div>
+                <div className="rounded-2xl bg-sky-50 p-4">
+                  <p className="text-[9px] font-black uppercase text-sky-600">Paid Out</p>
+                  <p className="text-xl font-black text-sky-700">${(selectedParticipantStats?.winningsPaidOut || 0).toFixed(2)}</p>
+                </div>
+                <div className="rounded-2xl bg-amber-50 p-4">
+                  <p className="text-[9px] font-black uppercase text-amber-600">Net Owed</p>
+                  <p className="text-xl font-black text-amber-700">${(selectedParticipantStats?.netOwed || 0).toFixed(2)}</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveParticipant} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div><label htmlFor="participant-full-name" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Full Name</label><input id="participant-full-name" value={editFormData.name} onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))} className="w-full p-4 bg-gray-50 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                  <div><label htmlFor="participant-alias" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Alias</label><input id="participant-alias" value={editFormData.alias} onChange={(e) => setEditFormData(prev => ({ ...prev, alias: e.target.value.toUpperCase() }))} className="w-full p-4 bg-gray-50 rounded-xl font-bold uppercase outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                  <div><label htmlFor="participant-email" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Email</label><input id="participant-email" type="email" value={editFormData.email} onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))} className="w-full p-4 bg-gray-50 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                  <div><label htmlFor="participant-phone" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Phone</label><input id="participant-phone" value={editFormData.phone} onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value }))} className="w-full p-4 bg-gray-50 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                </div>
+                <div className="flex justify-end">
+                  <button type="submit" className="bg-indigo-900 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-black transition-all">Save Participant</button>
+                </div>
+              </form>
+
+              <div className="space-y-3">
+                <div>
+                  <h4 className="text-sm font-black uppercase text-gray-900">Winning Entries</h4>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-1">Read-only list of wins attached to this participant.</p>
+                </div>
+                {(participantWinningEntries.get(editModalParticipant.id) || []).length === 0 ? (
+                  <div className="rounded-2xl bg-gray-50 p-6 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">No winning entries yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {(participantWinningEntries.get(editModalParticipant.id) || []).map(({ entry, payout }) => (
+                      <div key={entry.id} className="rounded-2xl border border-gray-100 p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-black text-gray-900 uppercase">{entry.label}</p>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-1">Score {entry.teamAScore}-{entry.teamBScore} • Payout ${payout.toFixed(2)}</p>
+                        </div>
+                        <div className="rounded-xl bg-gray-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                          Win Record
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-black uppercase text-gray-900">Winner Payout Entries</h4>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-1">Track winnings paid out once per participant, with as many payout logs as needed.</p>
+                </div>
+
+                <form onSubmit={handleSaveWinningsPayout} className="rounded-2xl border border-gray-100 p-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label htmlFor="winner-payout-amount" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Amount Paid</label>
+                      <input id="winner-payout-amount" type="number" step="0.01" value={winningsPayoutAmount} onChange={(e) => setWinningsPayoutAmount(e.target.value)} className="w-full p-4 bg-gray-50 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label htmlFor="winner-payout-method" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Payment Method</label>
+                      <select id="winner-payout-method" value={winningsPayoutMethod} onChange={(e) => setWinningsPayoutMethod(e.target.value)} className="w-full p-4 bg-gray-50 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500">
+                        {WINNINGS_PAYMENT_METHODS.map(method => (
+                          <option key={method} value={method}>{method}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="winner-payout-note" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Note</label>
+                      <input id="winner-payout-note" value={winningsPayoutNote} onChange={(e) => setWinningsPayoutNote(e.target.value)} className="w-full p-4 bg-gray-50 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 justify-end">
+                    {editingWinningsTransactionId && <button type="button" onClick={() => { setEditingWinningsTransactionId(null); setWinningsPayoutAmount(''); setWinningsPayoutMethod('Cash'); setWinningsPayoutNote(''); }} className="px-4 py-3 rounded-xl border border-gray-200 font-black uppercase text-[10px] text-gray-600">Cancel</button>}
+                    <button type="submit" className="px-4 py-3 rounded-xl bg-emerald-600 text-white font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-emerald-700 transition-all">{editingWinningsTransactionId ? 'Update Payout' : 'Add Payout'}</button>
+                  </div>
+                </form>
+
+                {(editModalParticipant.winningsPayoutHistory || []).length === 0 ? (
+                  <div className="rounded-2xl bg-gray-50 p-6 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">No participant payout entries yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {(editModalParticipant.winningsPayoutHistory || []).slice().sort((left, right) => right.timestamp - left.timestamp).map((transaction) => (
+                      <div key={transaction.id} className="rounded-2xl border border-gray-100 p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-black text-gray-900 uppercase">${transaction.amount.toFixed(2)} via {transaction.method}</p>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-1">{new Date(transaction.timestamp).toLocaleString()}{transaction.note ? ` • ${transaction.note}` : ''}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button type="button" onClick={() => handleEditWinningsTransaction(transaction)} className="px-4 py-3 rounded-xl bg-white text-indigo-900 border border-indigo-100 font-black uppercase tracking-widest text-[10px] hover:bg-indigo-50 transition-all">Edit</button>
+                          <button type="button" onClick={() => handleDeleteWinningsTransaction(transaction.id)} className="px-4 py-3 rounded-xl bg-red-50 text-red-600 border border-red-100 font-black uppercase tracking-widest text-[10px] hover:bg-red-100 transition-all">Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

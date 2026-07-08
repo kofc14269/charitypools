@@ -89,7 +89,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               <div className="p-5 bg-gray-50 rounded-2xl border border-gray-100">
                 <p className="text-[10px] font-black text-indigo-900 uppercase mb-2">Sharing the Contest</p>
                 <p className="text-xs text-gray-500 font-medium leading-relaxed">
-                  Click the <span className="text-indigo-600 font-bold">Share</span> button to get a shareable link. Recipients can see the board and join without needing special access.
+                  Click the <span className="text-indigo-600 font-bold">Copy Link</span> button in the header to get a unique shareable link for this contest. Recipients can see the board and join without needing special access.
                 </p>
               </div>
               <div className="p-5 bg-gray-50 rounded-2xl border border-gray-100">

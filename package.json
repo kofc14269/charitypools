@@ -16,14 +16,17 @@
   },
   "dependencies": {
     "@google/genai": "^1.38.0",
+    "@tailwindcss/vite": "^4.2.2",
     "firebase": "^12.8.0",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.2.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.1",
     "@testing-library/dom": "^9.0.0",
     "@testing-library/jest-dom": "^6.0.0",
+    "@types/jsdom": "^28.0.1",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "gh-pages": "^6.3.0",

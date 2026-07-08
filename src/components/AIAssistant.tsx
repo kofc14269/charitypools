@@ -30,15 +30,20 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ globalSettings, activePool })
     setIsLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        setMessages(prev => [...prev, { role: 'ai', text: "API key is missing. Please set VITE_GEMINI_API_KEY in your .env file." }]);
+        setIsLoading(false);
+        return;
+      }
+      const ai = new GoogleGenAI({ apiKey });
       const context = `
         You are the "Charity Squares Assistant" for the Kofc Charity Pools contest.
         Current Charity: ${globalSettings.charityName}.
         Current Matchup: ${activePool.settings.teamA} vs ${activePool.settings.teamB}.
         Cost per square: $${activePool.settings.costPerBox}.
         Board Name: ${activePool.name}.
-        Rules: Participants pick a square. Once the board is full, axes (0-9) are randomized. 
-        Winning square is determined by the last digit of the score for each team at various intervals (usually quarters).
+        Rules: ${activePool.settings?.rules?.trim() ? activePool.settings.rules : "Participants pick a square. Once the board is full, axes (0-9) are randomized. Winning square is determined by the last digit of the score for each team at various intervals (usually quarters)."}
         Keep responses helpful, enthusiastic about charity, and concise.
       `;
 

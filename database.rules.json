@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": true,
+        ".write": "$uid === auth.uid || (auth.token != null && auth.token.email === 'kofc14269@gmail.com')"
+      }
+    },
+    "state": {
+      ".read": true,
+      ".write": "auth.token != null && auth.token.email === 'kofc14269@gmail.com'"
+    }
+  }
+}

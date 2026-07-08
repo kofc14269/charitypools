@@ -5,6 +5,7 @@ function loadJSONCandidates() {
   const candidates = [
     'state.json',
     'squares.json',
+    'reports/squares.json',
     'exported_state.json',
     'dist/state.json'
   ];
@@ -109,8 +110,12 @@ function generateReport(state) {
     ]);
   });
 
-  const agingPath = path.join(__dirname, '..', 'aging_report.csv');
-  const gridPath = path.join(__dirname, '..', 'grid_numbers.csv');
+  const reportsDir = path.join(__dirname, '..', 'reports');
+  if (!fs.existsSync(reportsDir)) {
+    fs.mkdirSync(reportsDir, { recursive: true });
+  }
+  const agingPath = path.join(reportsDir, 'aging_report.csv');
+  const gridPath = path.join(reportsDir, 'grid_numbers.csv');
 
   writeCSV(agingPath, ['Pool','Alias','Name','Email','Phone','BoxesPlayed','BoxIDs','CostPerBox','TotalDue','TotalPaid','Outstanding'], agingRows);
   writeCSV(gridPath, ['Pool','RowNumbers','ColNumbers'], grids);
@@ -127,7 +132,7 @@ function main() {
     process.exit(1);
   }
 
-  const prefer = ['state.json','exported_state.json','squares.json','dist/state.json'];
+  const prefer = ['state.json','exported_state.json','squares.json','reports/squares.json','dist/state.json'];
   candidates.sort((a,b) => prefer.indexOf(a.name) - prefer.indexOf(b.name));
   const chosen = candidates[0];
   console.log('Using file:', chosen.path);

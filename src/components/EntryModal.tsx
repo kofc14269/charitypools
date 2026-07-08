@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Participant, GameSettings, Square, Pool } from '../types';
+import { Participant, GameSettings, Square, Pool, ThirteenRunData } from '../types';
 
 interface EntryModalProps {
   isOpen: boolean;
@@ -9,6 +9,7 @@ interface EntryModalProps {
   onUnassign: (id: number) => void;
   onSetPendingSelection: (ids: number[]) => void;
   selectedSquareIds: number[];
+  selectedTeamId?: string | null;
   activePool: Pool;
   existingParticipants: (Participant & { originPoolName?: string })[];
   settings: GameSettings;
@@ -22,6 +23,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
   onUnassign,
   onSetPendingSelection,
   selectedSquareIds,
+  selectedTeamId,
   activePool,
   existingParticipants, 
   settings,
@@ -39,9 +41,18 @@ const EntryModal: React.FC<EntryModalProps> = ({
     alias: '',
   });
 
+  const isTeamEntry = activePool.type === '13run' && !!selectedTeamId;
+
   const currentSelection = useMemo(() => {
+    if (isTeamEntry) return [];
     return (selectedSquareIds || []).map(id => (activePool.squares || [])[id]).filter(Boolean);
-  }, [selectedSquareIds, activePool.squares]);
+  }, [selectedSquareIds, activePool.squares, isTeamEntry]);
+
+  const selectedTeam = useMemo(() => {
+    if (!isTeamEntry || !selectedTeamId) return null;
+    const entries = (activePool.gameData as ThirteenRunData)?.entries || {};
+    return entries[selectedTeamId];
+  }, [isTeamEntry, selectedTeamId, activePool.gameData]);
 
   const matchedParticipant = useMemo(() => {
     // Match only by alias - allows same email/phone with different alias
@@ -49,6 +60,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
   }, [formData.alias, existingParticipants]);
 
   const allSquaresInCheckout = useMemo(() => {
+    if (isTeamEntry) return [];
     const matchedPId = matchedParticipant?.id;
     if (!matchedPId) return currentSelection;
     const otherUnpaid = (activePool.squares || []).filter(sq => 
@@ -57,26 +69,45 @@ const EntryModal: React.FC<EntryModalProps> = ({
       (sq.paidAmount || 0) < settings.costPerBox
     );
     return [...currentSelection, ...otherUnpaid];
-  }, [matchedParticipant, activePool.squares, selectedSquareIds, currentSelection, settings.costPerBox]);
+  }, [matchedParticipant, activePool.squares, selectedSquareIds, currentSelection, settings.costPerBox, isTeamEntry]);
 
-  const allAssigned = currentSelection.length > 0 && currentSelection.every(s => s.assigned);
+  const allAssigned = isTeamEntry ? !!selectedTeam?.participantId : (currentSelection.length > 0 && currentSelection.every(s => s.assigned));
 
   const verifiedPlayerStats = useMemo(() => {
-    if ((!isVerified && !isAdmin) || currentSelection.length === 0) return null;
-    const firstSq = currentSelection[0];
-    const p = existingParticipants.find(p => p.id === firstSq?.participantId);
+    if ((!isVerified && !isAdmin)) return null;
+    
+    let participantId: string | null = null;
+    if (isTeamEntry) {
+      participantId = selectedTeam?.participantId || null;
+    } else if (currentSelection.length > 0) {
+      participantId = currentSelection[0].participantId;
+    }
+
+    if (!participantId) return null;
+    const p = existingParticipants.find(p => p.id === participantId);
     if (!p) return null;
 
-    const playerSquares = (activePool.squares || []).filter(s => s.participantId === p.id);
-    const totalOwed = playerSquares.length * settings.costPerBox;
+    let boxCount = 0;
+    let totalOwed = 0;
+
+    if (activePool.type === '13run') {
+      const entries = (activePool.gameData as ThirteenRunData)?.entries || {};
+      boxCount = Object.values(entries).filter(e => e.participantId === p.id).length;
+    } else {
+      const playerSquares = (activePool.squares || []).filter(s => s.participantId === p.id);
+      boxCount = playerSquares.length;
+    }
+
+    totalOwed = boxCount * settings.costPerBox;
     const totalPaid = (p.paymentHistory || []).reduce((sum, t) => sum + t.amount, 0);
     const balance = Math.max(0, totalOwed - totalPaid);
-    return { balance, totalPaid, boxCount: playerSquares.length, p };
-  }, [isVerified, isAdmin, currentSelection, existingParticipants, activePool.squares, settings.costPerBox]);
+    return { balance, totalPaid, boxCount, p };
+  }, [isVerified, isAdmin, currentSelection, existingParticipants, activePool.squares, activePool.gameData, activePool.type, settings.costPerBox, isTeamEntry, selectedTeam]);
   
   const totalDue = useMemo(() => {
+    if (isTeamEntry) return settings.costPerBox;
     return allSquaresInCheckout.length * settings.costPerBox - allSquaresInCheckout.reduce((acc, s) => acc + (s.paidAmount || 0), 0);
-  }, [allSquaresInCheckout, settings.costPerBox]);
+  }, [allSquaresInCheckout, settings.costPerBox, isTeamEntry]);
 
   useEffect(() => {
     if (isOpen) {
@@ -86,23 +117,32 @@ const EntryModal: React.FC<EntryModalProps> = ({
       setVerificationError(false);
       setActiveQr(null);
       
-      if (currentSelection.length === 1 && currentSelection[0].assigned) {
-        const p = existingParticipants.find(p => p.id === currentSelection[0].participantId);
-        if (p) {
-          setFormData({
-            name: p.name,
-            email: p.email,
-            phone: p.phone,
-            alias: p.alias.toUpperCase(),
-          });
+      if (allAssigned) {
+        let participantId: string | null = null;
+        if (isTeamEntry) {
+          participantId = selectedTeam?.participantId || null;
+        } else if (currentSelection.length === 1) {
+          participantId = currentSelection[0].participantId;
+        }
+
+        if (participantId) {
+          const p = existingParticipants.find(p => p.id === participantId);
+          if (p) {
+            setFormData({
+              name: p.name,
+              email: p.email,
+              phone: p.phone,
+              alias: p.alias.toUpperCase(),
+            });
+          }
         }
       } else {
         setFormData({ name: '', email: '', phone: '', alias: '' });
       }
     }
-  }, [isOpen, currentSelection, existingParticipants]);
+  }, [isOpen, currentSelection, existingParticipants, allAssigned, isTeamEntry, selectedTeam]);
 
-  if (!isOpen || currentSelection.length === 0) return null;
+  if (!isOpen || (!isTeamEntry && currentSelection.length === 0)) return null;
 
   const handleRemoveSquareFromSelection = (id: number) => {
     const newSelection = (selectedSquareIds || []).filter(sid => sid !== id);
@@ -138,8 +178,15 @@ const EntryModal: React.FC<EntryModalProps> = ({
 
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
-    const firstSq = currentSelection[0];
-    const participant = existingParticipants.find(p => p.id === firstSq.participantId);
+    let participantId: string | null = null;
+    if (isTeamEntry) {
+      participantId = selectedTeam?.participantId || null;
+    } else {
+      participantId = currentSelection[0]?.participantId;
+    }
+
+    if (!participantId) return;
+    const participant = existingParticipants.find(p => p.id === participantId);
     if (participant && participant.email.toLowerCase() === verificationEmail.toLowerCase()) {
       setIsVerified(true);
       setVerificationError(false);
@@ -150,7 +197,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
 
   const PaymentActions = ({ currentAlias, amount }: { currentAlias: string; amount: number }) => {
     const paypalUrl = settings.paypalLink || (settings.paypalAccount ? `https://www.paypal.com/paypalme/${settings.paypalAccount}/${amount}` : null);
-    const venmoUrl = settings.venmoAccount ? `https://venmo.com/${settings.venmoAccount.replace('@', '')}?txn=pay&amount=${amount}&note=${encodeURIComponent(`Squares: ${currentAlias.toUpperCase()}`)}` : null;
+    const venmoUrl = settings.venmoAccount ? `https://venmo.com/${settings.venmoAccount.replace('@', '')}?txn=pay&amount=${amount}&note=${encodeURIComponent(`${isTeamEntry ? '13-Run' : 'Squares'}: ${currentAlias.toUpperCase()}`)}` : null;
     return (
       <div className="space-y-4">
         {paypalUrl && <a href={paypalUrl} target="_blank" className="flex items-center justify-between px-5 py-3 bg-[#003087] text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg"><span><i className="fab fa-paypal mr-2"></i> PayPal: ${amount}</span></a>}
@@ -166,7 +213,9 @@ const EntryModal: React.FC<EntryModalProps> = ({
       <div className="bg-white rounded-t-[2rem] md:rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in slide-in-from-bottom-full md:slide-in-from-bottom-6 duration-300">
         <div className="p-6 md:p-8 bg-indigo-900 text-white flex justify-between items-center relative overflow-hidden">
           <div className="relative z-10">
-            <h2 className="text-xl md:text-2xl font-black uppercase tracking-tight leading-none">{allAssigned ? 'Manage Box' : `Claiming ${currentSelection.length} Boxes`}</h2>
+            <h2 className="text-xl md:text-2xl font-black uppercase tracking-tight leading-none">
+              {allAssigned ? 'Manage Entry' : (isTeamEntry ? `Claiming ${selectedTeam?.teamName}` : `Claiming ${currentSelection.length} Boxes`)}
+            </h2>
             <p className="text-indigo-300 text-[9px] font-bold uppercase tracking-widest mt-2 uppercase">{isAdmin ? 'ADMIN CONTROL ENABLED' : `Support ${settings.charityName}`}</p>
           </div>
           <button onClick={onClose} className="bg-white/10 w-10 h-10 rounded-full flex items-center justify-center z-10"><i className="fas fa-times text-xl"></i></button>
