@@ -4,3 +4,5 @@ reports/
 .env
 .env.local
 .env.*
+scratch/
+tsc_output*.txt

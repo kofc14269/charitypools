@@ -8,7 +8,6 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithRedirect,
   signOut,
   User
 } from "firebase/auth";
@@ -172,9 +171,6 @@ const App: React.FC = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setAuthUser(user);
-      if (user) {
-        console.log("Auth User:", user.email, "UID:", user.uid);
-      }
       if (user && window.sessionStorage.getItem(ADMIN_AUTH_SESSION_KEY) === 'true') {
         setIsAdminAuthenticated(true);
       }
@@ -221,12 +217,11 @@ const App: React.FC = () => {
 
       const syncAccount = async () => {
         const userSnap = await get(userRef);
-        
+
         // If the current user has no pools, try to bootstrap from the legacy global state
         if (!userSnap.exists() || (userSnap.val()?.pools?.length || 0) === 0) {
           const legacySnap = await get(legacyRef);
           if (legacySnap.exists() && (legacySnap.val()?.pools?.length || 0) > 0) {
-            console.log("Empty account detected. Bootstrapping from Legacy Global state...");
             await set(userRef, legacySnap.val());
           }
         }
@@ -580,9 +575,7 @@ const App: React.FC = () => {
       });
     }
 
-    update(ref(db), updates).then(() => {
-      console.log(`Unassigned square ${id + 1} and redistributed payments.`);
-    }).catch(err => {
+    update(ref(db), updates).catch(err => {
       console.error("Failed to unassign square:", err);
       alert("Error removing name. Please try again.");
     });

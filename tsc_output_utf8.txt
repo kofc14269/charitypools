@@ -1,7 +1,0 @@
-src/App.tsx(81,69): error TS2339: Property 'env' does not exist on type 'ImportMeta'.
-src/components/__tests__/AdminPanel.participants.test.tsx(104,7): error TS2322: Type '{ id: number; row: number; col: number; participantId: number; alias: string; paidAmount: number; assigned: boolean; }[]' is not assignable to type 'Square[]'.
-  Type '{ id: number; row: number; col: number; participantId: number; alias: string; paidAmount: number; assigned: boolean; }' is not assignable to type 'Square'.
-    Types of property 'participantId' are incompatible.
-      Type 'number' is not assignable to type 'string'.
-src/components/AdminPanel.tsx(391,16): error TS2304: Cannot find name 'onCreateGlobalParticipant'.
-src/components/AdminPanel.tsx(391,58): error TS2304: Cannot find name 'onCreateGlobalParticipant'.

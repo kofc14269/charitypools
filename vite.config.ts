@@ -14,7 +14,6 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return;
           if (id.includes('firebase')) return 'firebase';
-          if (id.includes('@google/genai')) return 'genai';
           if (id.includes('react') || id.includes('scheduler')) return 'react-vendor';
           return 'vendor';
         },
