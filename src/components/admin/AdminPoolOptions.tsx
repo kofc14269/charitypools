@@ -57,6 +57,24 @@ const AdminPoolOptions: React.FC<AdminPoolOptionsProps> = ({
                         <p className="text-indigo-300 font-bold uppercase text-[9px] tracking-widest mt-2 px-1">Active: {activePool.name}</p>
                     </div>
                 </div>
+                <div className="bg-white px-6 py-6 rounded-2xl border border-indigo-50 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <p className="text-[10px] font-black text-indigo-950 uppercase tracking-widest">Print QR Code</p>
+                            <p className="text-[9px] text-indigo-400 uppercase tracking-widest">Include a contest QR code on printable contest pages</p>
+                        </div>
+                        <label className="inline-flex items-center gap-2 cursor-pointer">
+                            <input
+                                title="Print QR code on contest"
+                                type="checkbox"
+                                checked={!!poolSettings.printQrCodeOnPrint}
+                                onChange={e => onUpdatePoolSettings({ printQrCodeOnPrint: e.target.checked })}
+                                className="w-5 h-5 rounded border-indigo-300 text-indigo-600"
+                            />
+                            <span className="text-[9px] font-black uppercase text-indigo-700">Enable</span>
+                        </label>
+                    </div>
+                </div>
                 <div className="bg-indigo-50 px-6 py-3 rounded-2xl flex flex-col items-center">
                     <p className="text-[8px] font-black text-indigo-400 uppercase mb-1">Set Entry Cost</p>
                     <div className="flex items-center gap-1">

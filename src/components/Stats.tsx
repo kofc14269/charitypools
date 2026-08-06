@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { Square, GameSettings, Participant, PaymentTransaction, ScoreEntry, Pool, ThirteenRunData } from '../types';
 import { solvePayoutForEntry, calculateFinancialSummary, parseCustomPayoutValue } from '../utils/finance';
 
-const WINNINGS_PAYMENT_METHODS = ['Cash', 'Venmo', 'PayPal', 'Zelle', 'Other'];
+const WINNINGS_PAYMENT_METHODS = ['Cash', 'Check', 'Zelle', 'Other'];
 
 interface StatsProps {
   activePool: Pool | null;
@@ -144,7 +144,9 @@ const Stats: React.FC<StatsProps> = ({
         entryCount = safeSquares.filter(s => s.participantId === p.id).length;
       }
 
-      const totalPaid = (p.paymentHistory || []).reduce((sum, t) => sum + t.amount, 0);
+      const totalPaid = activePool?.type === 'squares'
+        ? safeSquares.filter(sq => sq.participantId === p.id).reduce((sum, sq) => sum + (sq.paidAmount || 0), 0)
+        : (p.paymentHistory || []).reduce((sum, t) => sum + t.amount, 0);
       const totalOwed = entryCount * costPerBox;
       const totalWon = participantWinnings.get(p.id) || 0;
       const winningsPaidOut = participantWinningsPaidOut.get(p.id) || 0;
@@ -297,17 +299,17 @@ const Stats: React.FC<StatsProps> = ({
     const existingHistory = editModalParticipant.winningsPayoutHistory || [];
     const winningsPayoutHistory = editingWinningsTransactionId
       ? existingHistory.map(transaction => {
-          if (transaction.id === editingWinningsTransactionId) {
-            const updated = { ...transaction, amount, method: winningsPayoutMethod };
-            if (noteRaw) {
-              updated.note = noteRaw;
-            } else {
-              delete updated.note;
-            }
-            return updated;
+        if (transaction.id === editingWinningsTransactionId) {
+          const updated = { ...transaction, amount, method: winningsPayoutMethod };
+          if (noteRaw) {
+            updated.note = noteRaw;
+          } else {
+            delete updated.note;
           }
-          return transaction;
-        })
+          return updated;
+        }
+        return transaction;
+      })
       : [...existingHistory, nextTransaction];
 
     onUpdateParticipant(editModalParticipant.id, { winningsPayoutHistory });
@@ -407,7 +409,7 @@ const Stats: React.FC<StatsProps> = ({
             </div>
             <form onSubmit={handleConfirmPayment} className="p-6 space-y-4">
               <div><label htmlFor="payment-amount" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Amount ($)</label><input id="payment-amount" required autoFocus type="number" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="w-full p-4 bg-gray-50 rounded-xl font-black text-lg outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-              <div><label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Method</label><div className="grid grid-cols-2 gap-2">{['Cash', 'Venmo', 'PayPal', 'Other'].map(m => (<button key={m} type="button" onClick={() => setPaymentMethod(m)} className={`py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${paymentMethod === m ? 'bg-indigo-900 text-white' : 'bg-white text-gray-400'}`}>{m}</button>))}</div></div>
+              <div><label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Method</label><div className="grid grid-cols-2 gap-2">{['Cash', 'Check', 'Zelle', 'Other'].map(m => (<button key={m} type="button" onClick={() => setPaymentMethod(m)} className={`py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${paymentMethod === m ? 'bg-indigo-900 text-white' : 'bg-white text-gray-400'}`}>{m}</button>))}</div></div>
               <button type="submit" className={`w-full bg-green-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl`}>Confirm Payment</button>
             </form>
           </div>
@@ -459,6 +461,55 @@ const Stats: React.FC<StatsProps> = ({
                   <button type="submit" className="bg-indigo-900 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-black transition-all">Save Participant</button>
                 </div>
               </form>
+
+              <div className="space-y-3">
+                <div>
+                  <h4 className="text-sm font-black uppercase text-gray-900">Payment History</h4>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-1">Payments recorded for this participant in this pool.</p>
+                </div>
+                {(editModalParticipant.paymentHistory || []).length === 0 ? (
+                  <div className="rounded-2xl bg-gray-50 p-6 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">No payments recorded for this pool.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {(editModalParticipant.paymentHistory || []).slice().sort((a: any, b: any) => b.timestamp - a.timestamp).map((t: any) => (
+                      <div key={t.id} className="rounded-2xl border border-gray-100 p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-black text-gray-900 uppercase">${t.amount.toFixed(2)} via {t.method}</p>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-1">
+                            {new Date(t.timestamp).toLocaleString()}{t.note ? ` • ${t.note}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingTransactionId(t.id);
+                              setPaymentAmount(String(t.amount));
+                              setPaymentMethod(t.method || 'Cash');
+                              setPaymentNote(t.note || '');
+                              setPaymentModalParticipant(editModalParticipant);
+                            }}
+                            className="px-4 py-3 rounded-xl bg-white text-indigo-900 border border-indigo-100 font-black uppercase tracking-widest text-[10px] hover:bg-indigo-50 transition-all"
+                          >Edit</button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm('Delete this payment?')) {
+                                onDeletePayment(editModalParticipant.id, t.id);
+                                setEditModalParticipant({
+                                  ...editModalParticipant,
+                                  paymentHistory: (editModalParticipant.paymentHistory || []).filter((tx: any) => tx.id !== t.id)
+                                });
+                              }
+                            }}
+                            className="px-4 py-3 rounded-xl bg-red-50 text-red-600 border border-red-100 font-black uppercase tracking-widest text-[10px] hover:bg-red-100 transition-all"
+                          >Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="space-y-3">
                 <div>

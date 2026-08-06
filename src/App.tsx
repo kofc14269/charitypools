@@ -2,12 +2,13 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from 'react';
 import { AppState, Square, Tab, Participant, PaymentTransaction, Pool, GlobalSettings, PoolSettings, ScoreEntry, PoolType, SurvivorData, ThirteenRunData, ThirteenRunEntry } from './types';
 import Grid from './components/Grid';
-import { db, auth } from './firebase';
+import { db, auth, googleProvider } from './firebase';
 import { ref, onValue, set, update, get } from "firebase/database";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   User
 } from "firebase/auth";
@@ -21,6 +22,7 @@ const PlayerProfile = lazy(() => import('./components/PlayerProfile'));
 const SurvivorEngine = lazy(() => import('./components/SurvivorEngine'));
 const ThirteenRunEngine = lazy(() => import('./components/ThirteenRunEngine'));
 import { fetchScores, GameEvent } from './services/sportsApi';
+import { resolveTargetPoolId } from './utils/poolTarget';
 
 const createNewSquares = (): Square[] => Array.from({ length: 100 }, (_, i) => ({
   id: i,
@@ -39,6 +41,7 @@ const DEFAULT_POOL_SETTINGS: PoolSettings = {
   rowNumbers: Array(10).fill(null),
   colNumbers: Array(10).fill(null),
   isLocked: false,
+  printQrCodeOnPrint: false,
   payouts: {
     mode: 'standard',
     standardPayoutType: 'percent',
@@ -342,11 +345,34 @@ const App: React.FC = () => {
 
   // Participants relevant to the active pool (derived from global registry and pool participants/squares)
   const participantsForActivePool = useMemo(() => {
-    if (!activePool || !globalParticipants) return activePool?.participants || [];
-    const idsInPool = new Set<string>((activePool.participants || []).map(p => p.id).concat((activePool.squares || []).filter(s => s.participantId).map(s => s.participantId!)));
-    // include any global participant with boxes in this pool or explicitly listed in pool.participants
-    return globalParticipants.filter(p => idsInPool.has(p.id) || (activePool.participants || []).some(pp => pp.id === p.id));
+    if (!activePool) return [];
+    const poolParticipants = activePool.participants || [];
+    const globalById = new Map((globalParticipants || []).map(p => [p.id, p]));
+    const idsInPool = new Set<string>(
+      poolParticipants.map(p => p.id).concat(
+        (activePool.squares || []).filter(s => s.participantId).map(s => s.participantId!)
+      )
+    );
+
+    // For each participant in this pool, use the pool-level record as the source of truth
+    // for paymentHistory (pool-scoped), but fill in name/email/phone/alias from the
+    // global record in case the pool record is stale or missing those fields.
+    return poolParticipants
+      .filter(p => idsInPool.has(p.id))
+      .map(poolP => {
+        const globalP = globalById.get(poolP.id);
+        if (!globalP) return poolP;
+        return {
+          ...globalP,           // global fields (name, email, phone, alias, etc.)
+          ...poolP,             // pool fields override, importantly paymentHistory stays pool-scoped
+          name: poolP.name || globalP.name,
+          email: poolP.email || globalP.email,
+          phone: poolP.phone || globalP.phone,
+          alias: poolP.alias || globalP.alias,
+        };
+      });
   }, [activePool, globalParticipants]);
+
 
   // Participants with an origin pool name (used by EntryModal quick-select)
   const globalParticipantsWithOrigin = useMemo(() => {
@@ -414,7 +440,8 @@ const App: React.FC = () => {
 
   const atomicUpdateFinancials = useCallback((participantId: string, updatedParticipants: Participant[]) => {
     if (!state || !activePool || !ownerUid) return;
-    const poolIndex = state.pools.findIndex(p => p.id === state.activePoolId);
+    const targetPoolId = resolveTargetPoolId(state, activePool);
+    const poolIndex = state.pools.findIndex(p => p.id === targetPoolId);
     if (poolIndex === -1) return;
 
     const participant = updatedParticipants.find(p => p.id === participantId);
@@ -448,7 +475,8 @@ const App: React.FC = () => {
 
   const handleEntrySubmit = useCallback((data: Omit<Participant, 'id'>, squareIds: number[]) => {
     if (!state || !activePool || !ownerUid) return;
-    const poolIndex = state.pools.findIndex(p => p.id === state.activePoolId);
+    const targetPoolId = resolveTargetPoolId(state, activePool);
+    const poolIndex = state.pools.findIndex(p => p.id === targetPoolId);
     if (poolIndex === -1) return;
 
     // Use Alias as the sole unique identifier for an entry
@@ -467,7 +495,8 @@ const App: React.FC = () => {
     } else {
       // ensure pool references this participant (back-compat)
       if (!newPoolParticipants.find(p => p.id === participant!.id)) {
-        newPoolParticipants.push(participant!);
+        // Always start with empty paymentHistory in a new pool — payments are pool-scoped
+        newPoolParticipants.push({ ...participant!, paymentHistory: [] });
         updates[`users/${ownerUid}/state/pools/${poolIndex}/participants`] = newPoolParticipants;
       }
     }
@@ -488,19 +517,20 @@ const App: React.FC = () => {
           ...(activePool.squares[sid] || {}),
           participantId: participant!.id,
           alias: (data.alias || participant!.alias || '').toUpperCase(),
-          assigned: true
+          assigned: true,
+          paidAmount: 0, // always reset — financials are set by atomicUpdateFinancials after
         };
       });
     }
 
     update(ref(db), updates).then(() => {
       if (participant) atomicUpdateFinancials(participant.id, newPoolParticipants);
-    }).catch(err => console.error(err));
 
-    setPendingSelection([]);
-    setSelectedSquareId(null);
-    setSelectedTeamId(null);
-    setIsEntryModalOpen(false);
+      setPendingSelection([]);
+      const selectedClaimId = squareIds[0] ?? null;
+      setSelectedSquareId(selectedClaimId);
+      setSelectedTeamId(null);
+    }).catch(err => console.error(err));
   }, [state, activePool, atomicUpdateFinancials, ownerUid, selectedTeamId]);
 
   const handleSquareClick = useCallback((id: number) => {
@@ -533,6 +563,10 @@ const App: React.FC = () => {
 
   const handleUnassignSquare = useCallback((id: number) => {
     if (!state || !activePool || !ownerUid) return;
+    if (activePool.settings?.isLocked && !isAdminAuthenticated) {
+      alert('Boxes have been confirmed. Only an admin may relinquish ownership.');
+      return;
+    }
     const sq = activePool.squares[id];
     if (!sq || !sq.participantId) return;
 
@@ -540,7 +574,8 @@ const App: React.FC = () => {
       return;
     }
 
-    const poolIndex = state.pools.findIndex(p => p.id === state.activePoolId);
+    const targetPoolId = resolveTargetPoolId(state, activePool);
+    const poolIndex = state.pools.findIndex(p => p.id === targetPoolId);
     if (poolIndex === -1) return;
 
     const participantId = sq.participantId;
@@ -582,13 +617,14 @@ const App: React.FC = () => {
 
     setIsEntryModalOpen(false);
     setSelectedSquareId(null);
-  }, [state, activePool, ownerUid]);
+  }, [state, activePool, ownerUid, isAdminAuthenticated]);
 
   const handleClearUserBoxes = useCallback((participantId: string) => {
     if (!state || !activePool || !ownerUid) return;
     if (!window.confirm('Remove this participant from the contest and clear all their squares?')) return;
 
-    const poolIndex = state.pools.findIndex(p => p.id === state.activePoolId);
+    const targetPoolId = resolveTargetPoolId(state, activePool);
+    const poolIndex = state.pools.findIndex(p => p.id === targetPoolId);
     const updates: any = {};
 
     // 1. Clear the participant's squares in the active pool
@@ -613,6 +649,7 @@ const App: React.FC = () => {
 
   const handleApplyPayment = useCallback((participantId: string, amount: number, method: string, note?: string) => {
     if (!state || !activePool) return;
+    const targetPoolId = resolveTargetPoolId(state, activePool);
     const newParticipants = activePool.participants.map(p => {
       if (p.id === participantId) {
         const transaction: any = { id: crypto.randomUUID(), amount, method, timestamp: Date.now() };
@@ -902,7 +939,7 @@ const App: React.FC = () => {
                   gameTab.label = '13-Run';
                 }
 
-                 const showAdminTab = isAdminAuthenticated || showAdminOption;
+                const showAdminTab = isAdminAuthenticated || showAdminOption;
 
                 const tabs: Array<{ id: Tab; icon: string; label: string }> = [
                   gameTab as any,
@@ -1062,9 +1099,6 @@ const App: React.FC = () => {
                   type="button"
                   onClick={async () => {
                     try {
-                      const { googleProvider } = await import('./firebase');
-                      const { signInWithPopup } = await import('firebase/auth');
-                      
                       const result = await signInWithPopup(auth, googleProvider);
                       if (result.user) {
                         setIsAdminAuthenticated(true);
@@ -1188,7 +1222,7 @@ const App: React.FC = () => {
         <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-2">{state.globalSettings.charityName}</p>
         <p className="text-[9px] font-medium uppercase tracking-widest flex items-center justify-center gap-2">
           Powered by Charity Squares Engine • {new Date().getFullYear()}
-          <button 
+          <button
             type="button"
             onClick={() => {
               const newShowAdmin = !showAdminOption;
@@ -1201,7 +1235,7 @@ const App: React.FC = () => {
               }
               window.history.replaceState({}, '', url.toString());
               setActiveTab('admin');
-            }} 
+            }}
             className="text-gray-400 hover:text-indigo-600 transition-colors cursor-pointer p-1.5 ml-2"
             title="Admin Access Toggle"
           >

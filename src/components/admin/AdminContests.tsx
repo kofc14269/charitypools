@@ -11,10 +11,11 @@ interface AdminContestsProps {
   handleCreatePool: (e: React.FormEvent) => void;
   onSwitchPool: (id: string) => void;
   onDeletePool: (id: string) => void;
+  onEditPoolRules: (id: string) => void;
 }
 
 const AdminContests: React.FC<AdminContestsProps> = ({
-  pools, activePoolId, showCreateForm, setShowCreateForm, newPoolData, setNewPoolData, handleCreatePool, onSwitchPool, onDeletePool
+  pools, activePoolId, showCreateForm, setShowCreateForm, newPoolData, setNewPoolData, handleCreatePool, onSwitchPool, onDeletePool, onEditPoolRules
 }) => {
   // Virtual type used only in the creation form UI — translated to 'squares' + singleWinner settings on submit
   const isSquaresType = newPoolData.type === 'squares' || (newPoolData.type as string) === 'squares-1w';
@@ -71,7 +72,7 @@ const AdminContests: React.FC<AdminContestsProps> = ({
               <div key={p.id} className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all ${p.id === activePoolId ? 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-500/20' : 'bg-gray-50 border-gray-100'}`}>
                 <div className="truncate pr-4">
                   <p className="font-black text-indigo-900 uppercase text-[10px] items-center gap-2 flex mb-1 truncate">
-                   <span className={`w-2 h-2 rounded-full ${contestType === 'survivor' ? 'bg-orange-500' : contestType === '13run' ? 'bg-red-500' : isSingleWinner ? 'bg-yellow-500' : 'bg-indigo-500'}`}></span>
+                    <span className={`w-2 h-2 rounded-full ${contestType === 'survivor' ? 'bg-orange-500' : contestType === '13run' ? 'bg-red-500' : isSingleWinner ? 'bg-yellow-500' : 'bg-indigo-500'}`}></span>
                     {(p.name || 'Untitled Pool').toUpperCase()}
                     <span className="text-[7px] bg-indigo-100 text-indigo-500 px-1.5 py-0.5 rounded-full">{displayLabel}</span>
                   </p>
@@ -81,6 +82,7 @@ const AdminContests: React.FC<AdminContestsProps> = ({
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
                   {p.id !== activePoolId && <button onClick={() => onSwitchPool(p.id)} className="px-4 py-2 bg-indigo-900 text-white rounded-lg text-[8px] font-black uppercase">Select</button>}
+                  <button title="Edit contest rules" onClick={() => onEditPoolRules(p.id)} className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white transition-all"><i className="fas fa-edit text-[10px]"></i></button>
                   <button title="Delete contest" onClick={() => onDeletePool(p.id)} className="w-8 h-8 bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all"><i className="fas fa-trash-alt text-[10px]"></i></button>
                 </div>
               </div>

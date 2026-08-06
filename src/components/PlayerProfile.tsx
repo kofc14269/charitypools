@@ -11,12 +11,18 @@ const PlayerProfile: React.FC<PlayerProfileProps> = ({ state }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeQr, setActiveQr] = useState<string | null>(null);
 
+  const normalizeAlias = (alias?: string) => (alias || '').trim().toLowerCase();
+  const matchesParticipant = (sq: Square, participant: Participant) => (
+    sq.participantId === participant.id ||
+    (sq.alias && participant.alias && normalizeAlias(sq.alias) === normalizeAlias(participant.alias))
+  );
+
   const playerStats = useMemo(() => {
     if (!searchQuery) return null;
-    
-    const results: { 
-      pool: Pool, 
-      participant: Participant, 
+
+    const results: {
+      pool: Pool,
+      participant: Participant,
       squares: Square[],
       due: number,
       paid: number
@@ -25,15 +31,15 @@ const PlayerProfile: React.FC<PlayerProfileProps> = ({ state }) => {
     const normalizedSearch = searchQuery.toLowerCase();
 
     state.pools.forEach(pool => {
-      const participant = (pool.participants || []).find(p => 
-        p.email.toLowerCase() === normalizedSearch || 
+      const participant = (pool.participants || []).find(p =>
+        p.email.toLowerCase() === normalizedSearch ||
         (p.phone || '').replace(/[^\d]/g, '') === normalizedSearch.replace(/[^\d]/g, '')
       );
       if (participant) {
-        const squares = (pool.squares || []).filter(s => s.participantId === participant.id);
+        const squares = (pool.squares || []).filter(s => matchesParticipant(s, participant));
         if (squares.length > 0) {
           const totalOwed = squares.length * pool.settings.costPerBox;
-          const totalPaid = (participant.paymentHistory || []).reduce((sum, t) => sum + t.amount, 0);
+          const totalPaid = squares.reduce((sum, sq) => sum + (sq.paidAmount || 0), 0);
           results.push({
             pool,
             participant,
@@ -63,10 +69,53 @@ const PlayerProfile: React.FC<PlayerProfileProps> = ({ state }) => {
 
   const generateQrUrl = (data: string) => `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data)}&margin=10`;
 
+  const buildPaypalUrl = (amount: number) => {
+    const settings = state.globalSettings;
+    const link = (settings.paypalLink || settings.paypalAccount || '').trim();
+    if (!link) return null;
+
+    // Support explicit {amount} placeholder
+    if (link.includes('{amount}')) {
+      return link.replace(/\{amount\}/g, amount.toString());
+    }
+
+    // Email address → PayPal invoice-style payment link with pre-filled amount
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(link);
+    if (isEmail) {
+      return `https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=${encodeURIComponent(link)}&amount=${amount}&currency_code=USD`;
+    }
+
+    try {
+      const normalized = link.startsWith('http') ? link : `https://${link}`;
+      const parsed = new URL(normalized);
+      const hostname = parsed.hostname.toLowerCase();
+      const pathname = parsed.pathname.replace(/\/+$/g, '');
+
+      // paypal.me or paypal.com/paypalme — replace/append the amount path segment
+      if (hostname.endsWith('paypal.me') || pathname.startsWith('/paypalme')) {
+        const segments = pathname.split('/').filter(Boolean);
+        // Keep only non-numeric leading segments (username), drop any stale amount
+        const baseSegments = segments.filter((s, i) => i === 0 || (i === 1 && isNaN(Number(s))));
+        return `${parsed.origin}/${baseSegments.join('/')}/${amount}`;
+      }
+
+      // Any other paypal.com URL — append amount as a query param if not already present
+      if (hostname.endsWith('paypal.com')) {
+        const params = new URLSearchParams(parsed.search);
+        if (!params.has('amount')) params.set('amount', String(amount));
+        return `${parsed.origin}${parsed.pathname}?${params.toString()}`;
+      }
+    } catch {
+      // Fall through to username handling below
+    }
+
+    // Bare username — build a canonical paypal.me URL with amount
+    return `https://paypal.me/${link}/${amount}`;
+  };
+
   const PaymentSection = ({ amount, alias }: { amount: number; alias: string }) => {
     const settings = state.globalSettings;
-    // Priority: Custom Link > Username
-    const paypalUrl = settings.paypalLink || (settings.paypalAccount ? `https://www.paypal.com/paypalme/${settings.paypalAccount}/${amount}` : null);
+    const paypalUrl = buildPaypalUrl(amount);
     const venmoUrl = settings.venmoAccount ? `https://venmo.com/${settings.venmoAccount.replace('@', '')}?txn=pay&amount=${amount}&note=${encodeURIComponent(`Balance: ${alias.toUpperCase()}`)}` : null;
     const zelleInfo = settings.zelleAccount || "";
 
@@ -132,7 +181,7 @@ const PlayerProfile: React.FC<PlayerProfileProps> = ({ state }) => {
             <p className="text-indigo-300 text-[8px] font-bold uppercase tracking-widest">Verify account balances</p>
           </div>
           <form onSubmit={handleSearch} className="flex gap-2">
-            <input 
+            <input
               required
               type="text"
               value={searchInput}
@@ -156,7 +205,7 @@ const PlayerProfile: React.FC<PlayerProfileProps> = ({ state }) => {
                 <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest mb-1">Squares</span>
                 <p className="text-2xl font-black text-indigo-900 leading-none">{playerStats.totalBoxes}</p>
               </div>
-              
+
               <div className="p-4 flex flex-col items-center text-center">
                 <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest mb-1">Contributed</span>
                 <p className="text-2xl font-black text-gray-900 leading-none">${playerStats.totalPaid}</p>
@@ -199,7 +248,7 @@ const PlayerProfile: React.FC<PlayerProfileProps> = ({ state }) => {
                       <div className="truncate">
                         <h4 className="font-black text-xs text-indigo-900 uppercase truncate">{res.pool.name}</h4>
                         <p className="text-[7px] font-bold text-gray-400 uppercase">
-                          {res.squares.length} Box{res.squares.length > 1 ? 'es' : ''} • ({res.squares.map(s => `#${s.id+1}`).join(', ')})
+                          {res.squares.length} Box{res.squares.length > 1 ? 'es' : ''} • ({res.squares.map(s => `#${s.id + 1}`).join(', ')})
                         </p>
                       </div>
                     </div>

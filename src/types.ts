@@ -91,6 +91,7 @@ export interface PoolSettings {
   isLocked: boolean;
   payouts: PayoutSettings;
   rules?: string;
+  printQrCodeOnPrint?: boolean;
 }
 
 // Added GameSettings to fix missing export error in components

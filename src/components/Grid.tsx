@@ -18,6 +18,7 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [zoom, setZoom] = useState(1);
   const gridRef = useRef<HTMLDivElement>(null);
+  const currentContestUrl = typeof window !== 'undefined' ? window.location.href : '';
 
   useEffect(() => {
     const calculate = () => {
@@ -34,12 +35,12 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
 
       // Pixel values from the Tailwind classes used below — deterministic, immune to zoom feedback
       // w-28=112, w-40=160, w-14=56, w-20=80, gap-[1px]=1, gap-[2px]=2, p-4=16
-      const squareW  = isMd ? 160 : 112;  // LABEL_WIDTH_CLASS
-      const rowNumW  = isMd ? 112 : 56;   // ROW_NUM_WIDTH_CLASS
-      const teamW    = isMd ? 160 : 80;   // TEAM_VERTICAL_WIDTH_CLASS
-      const gap      = isMd ? 2   : 1;    // gap between squares
-      const mr       = isMd ? 2   : 1;    // mr between row-num col and grid body
-      const padding  = 32;                 // p-4 = 16px × 2 sides on zoomed wrapper
+      const squareW = isMd ? 160 : 112;  // LABEL_WIDTH_CLASS
+      const rowNumW = isMd ? 112 : 56;   // ROW_NUM_WIDTH_CLASS
+      const teamW = isMd ? 160 : 80;   // TEAM_VERTICAL_WIDTH_CLASS
+      const gap = isMd ? 2 : 1;    // gap between squares
+      const mr = isMd ? 2 : 1;    // mr between row-num col and grid body
+      const padding = 32;                 // p-4 = 16px × 2 sides on zoomed wrapper
 
       // teamLabel + rowNumbers + margin + 10 squares + 9 inter-square gaps + 2× padding
       const naturalW = teamW + rowNumW + mr + (10 * squareW) + (9 * gap) + padding;
@@ -78,7 +79,7 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
     return (list && list.length > 0) ? list[index] : '?';
   };
 
-  const rows = useMemo(() => Array.from({ length: 10 }, (_, rowIndex) => 
+  const rows = useMemo(() => Array.from({ length: 10 }, (_, rowIndex) =>
     (squares || []).filter(sq => sq.row === rowIndex)
   ), [squares]);
 
@@ -86,13 +87,13 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
     const ids = new Set<number>();
     const { scores = [] } = activePool || {};
     const { rowNumbers, colNumbers } = settings;
-    
+
     (scores || []).forEach(s => {
       const lastDigitA = s.teamAScore % 10;
       const lastDigitB = s.teamBScore % 10;
       const rowIndex = (rowNumbers || []).indexOf(lastDigitA);
       const colIndex = (colNumbers || []).indexOf(lastDigitB);
-      
+
       if (rowIndex !== -1 && colIndex !== -1) {
         const winningSquare = squares.find(sq => sq.row === rowIndex && sq.col === colIndex);
         if (winningSquare) ids.add(winningSquare.id);
@@ -111,7 +112,7 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
     const totalRaised = squares.reduce((acc, sq) => acc + (sq.paidAmount || 0), 0);
     const potentialTotal = pledgedTotal;
     const totalCommitted = assignedCount * costPerBox;
-    
+
     return {
       assigned: assignedCount,
       remaining: (activePool?.type === 'squares' ? 100 : squares.length) - assignedCount,
@@ -163,10 +164,10 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
       const lastDigitB = s.teamBScore % 10;
       const rowIndex = (rowNumbers || []).indexOf(lastDigitA);
       const colIndex = (colNumbers || []).indexOf(lastDigitB);
-      
+
       const winnerSquare = squares.find(sq => sq.row === rowIndex && sq.col === colIndex);
       const winnerName = winnerSquare?.assigned ? winnerSquare.alias : (winnerSquare ? 'UNCLAIMED' : 'PENDING');
-      
+
       const payout = solvePayoutForEntry(s, index, scores, settings, projectedPlayerPot);
 
       const key = winnerName;
@@ -242,24 +243,37 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
   };
 
 
-  const LABEL_WIDTH_CLASS = "w-28 md:w-40"; 
-  const ROW_NUM_WIDTH_CLASS = "w-14 md:w-28"; 
-  const TEAM_VERTICAL_WIDTH_CLASS = "w-20 md:w-40"; 
+  const LABEL_WIDTH_CLASS = "w-28 md:w-40";
+  const ROW_NUM_WIDTH_CLASS = "w-14 md:w-28";
+  const TEAM_VERTICAL_WIDTH_CLASS = "w-20 md:w-40";
   // LEFT_SPACER matches TEAM_VERTICAL_WIDTH_CLASS + ROW_NUM_WIDTH_CLASS
   const LEFT_SPACER_CLASS = "min-w-[136px] md:min-w-[272px]";
 
   return (
     <div className="flex flex-col items-center w-full relative">
-      <div 
-        ref={gridRef} 
-        className="w-full overflow-hidden pb-4 print:overflow-visible relative flex justify-center" 
+      <div
+        ref={gridRef}
+        className="w-full overflow-hidden pb-4 print:overflow-visible relative flex justify-center"
       >
-        <div 
-          className="inline-block p-4 print:p-0 min-w-max print:zoom-100" 
+        <div
+          className="inline-block p-4 print:p-0 min-w-max print:zoom-100 print:scale-90 print:origin-top"
           style={{ zoom: zoom }}
         >
+          <div className="hidden print:block mb-6 text-center">
+            <div className="text-[12px] uppercase tracking-[0.4em] text-gray-500 mb-2">Contest</div>
+            <div className="text-2xl font-black uppercase text-indigo-900">{activePool.name || 'Charity Pool'}</div>
+            {activePool.settings?.printQrCodeOnPrint && currentContestUrl ? (
+              <div className="mt-4 flex justify-center">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(currentContestUrl)}`}
+                  alt="Contest QR Code"
+                  className="mx-auto h-44 w-44 rounded-3xl border border-indigo-200 bg-white p-3"
+                />
+              </div>
+            ) : null}
+          </div>
           <div className="grid-inner-content flex flex-col print:scale-100 print:transform-none">
-              <div className={`${LEFT_SPACER_CLASS} flex-shrink-0`}></div>
+            <div className={`${LEFT_SPACER_CLASS} flex-shrink-0`}></div>
 
             <div className="flex items-end">
               <div className={`${LEFT_SPACER_CLASS} flex-shrink-0`}></div>
@@ -320,20 +334,19 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
                       const participant = sq.participantId ? participantMap[sq.participantId] : null;
                       const fullName = participant ? participant.name : '';
                       const isWinner = winningSquareIds.has(sq.id);
-                      
+
                       return (
-                        <div 
-                          key={sq.id} 
+                        <div
+                          key={sq.id}
                           title={sq.assigned ? `Player: ${fullName}\nAlias: ${displayAlias}` : `Box #${sq.id + 1}`}
-                          className={`group square-box cursor-pointer ${LABEL_WIDTH_CLASS} h-24 md:h-36 flex flex-col items-center justify-center p-2 transition-all relative ${
-                            isWinner ? 'bg-yellow-100 !border-yellow-300' : 
-                            sq.assigned ? (isFullyPaid ? 'bg-green-50' : (isPartiallyPaid ? 'bg-orange-50' : 'bg-indigo-50')) : 
-                            (isPendingInCart ? 'bg-indigo-600 ring-4 ring-indigo-400/50 scale-95 z-10 shadow-inner' : (settings?.isLocked ? 'bg-gray-100' : 'bg-white'))
-                          }`} 
+                          className={`group square-box cursor-pointer ${LABEL_WIDTH_CLASS} h-24 md:h-36 flex flex-col items-center justify-center p-2 transition-all relative ${isWinner ? 'bg-yellow-100 !border-yellow-300' :
+                            sq.assigned ? (isFullyPaid ? 'bg-green-50' : (isPartiallyPaid ? 'bg-orange-50' : 'bg-indigo-50')) :
+                              (isPendingInCart ? 'bg-indigo-600 ring-4 ring-indigo-400/50 scale-95 z-10 shadow-inner' : (settings?.isLocked ? 'bg-gray-100' : 'bg-white'))
+                            }`}
                           onClick={() => onSquareClick(sq.id)}
                         >
                           <span className={`absolute inset-0 flex items-center justify-center text-[24px] md:text-[48px] font-black pointer-events-none transition-opacity ${isPendingInCart ? 'text-white/10' : 'text-indigo-950/10'} ${sq.assigned ? 'opacity-20' : ''}`}>{sq.id + 1}</span>
-                          
+
                           {sq.assigned ? (
                             <div className="flex flex-col items-center justify-center w-full h-full relative z-10 text-center overflow-hidden">
                               <span className={`text-[10px] md:text-[14px] font-black ${isFullyPaid ? 'text-green-600' : 'text-indigo-950'} uppercase leading-tight line-clamp-3 break-words w-full group-hover:hidden px-1`}>
@@ -354,201 +367,213 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div className="grid-controls w-full max-w-5xl flex flex-col md:flex-row items-center justify-between mb-8 print-hidden px-4 gap-4 z-[90] relative">
-         <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2 relative">
-               <button 
-                 type="button"
-                 onClick={() => setShowExportMenu(!showExportMenu)}
-                 className="bg-white text-indigo-900 px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center gap-3 border-2 border-indigo-100 shadow-xl cursor-pointer active:scale-95 select-none"
-               >
-                 <i className="fas fa-file-export text-indigo-600"></i> Export & Print
-                 <i className={`fas fa-chevron-${showExportMenu ? 'up' : 'down'} text-[8px] transition-transform`}></i>
-               </button>
-
-               {showExportMenu && (
-                 <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-indigo-50 p-2 animate-in slide-in-from-top-2 duration-200 z-[100]">
-                   <button onClick={handleStandardPrint} className="w-full text-left px-4 py-3 hover:bg-indigo-50 rounded-xl flex items-center gap-3 transition-colors">
-                     <i className="fas fa-desktop text-indigo-400 text-xs"></i>
-                     <div>
-                       <p className="text-[10px] font-black text-indigo-900 uppercase">Browser Print</p>
-                       <p className="text-[8px] text-gray-400 font-bold uppercase">Standard system dialog</p>
-                     </div>
-                   </button>
-                   <button onClick={handleIsolatedPrint} className="w-full text-left px-4 py-3 hover:bg-indigo-50 rounded-xl flex items-center gap-3 transition-colors">
-                     <i className="fas fa-window-maximize text-indigo-400 text-xs"></i>
-                     <div>
-                       <p className="text-[10px] font-black text-indigo-900 uppercase">Isolated Print View</p>
-                       <p className="text-[8px] text-gray-400 font-bold uppercase">Best for mobile & tablets</p>
-                     </div>
-                   </button>
-                   <div className="h-[1px] bg-indigo-50 my-1"></div>
-                   <button onClick={handleExportCSV} className="w-full text-left px-4 py-3 hover:bg-green-50 rounded-xl flex items-center gap-3 transition-colors">
-                     <i className="fas fa-file-csv text-green-500 text-xs"></i>
-                     <div>
-                       <p className="text-[10px] font-black text-indigo-900 uppercase">Export Grid CSV</p>
-                       <p className="text-[8px] text-gray-400 font-bold uppercase">Download mapping data</p>
-                     </div>
-                   </button>
-                 </div>
-               )}
-            </div>
-
-         </div>
-
-         {pendingSelection.length > 0 && (
-           <button onClick={onCheckout} className="bg-green-600 text-white px-10 py-4 rounded-2xl text-[12px] font-black uppercase tracking-[0.2em] hover:scale-105 active:scale-95 transition-all flex items-center gap-3 shadow-2xl">
-             <i className="fas fa-shopping-cart"></i> Claim {pendingSelection.length} Box{pendingSelection.length > 1 ? 'es' : ''}
-           </button>
-         )}
-      </div>
-
-      <div className="w-full max-w-6xl mb-6 px-4 print-hidden">
-        <div className="bg-indigo-900 rounded-[2rem] p-6 shadow-2xl flex flex-col lg:flex-row items-center justify-between gap-6 border-b-4 border-indigo-950 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
-            <i className="fas fa-football-ball text-[120px] rotate-12"></i>
-          </div>
-          
-          <div className="flex items-center gap-4 w-full lg:w-auto z-10">
-            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-white flex-shrink-0">
-              <i className="fas fa-hand-holding-heart text-xl"></i>
-            </div>
-            <div>
-              <p className="text-indigo-300 text-[9px] font-black uppercase tracking-widest">Charity Impact Goal</p>
-              <h3 className="text-xl font-black text-white uppercase leading-none mt-1 whitespace-nowrap">
-                {formatMoney(stats.totalRaised)} <span className="text-indigo-400">/ {formatMoney(stats.potentialTotal)} Raised</span>
-              </h3>
-            </div>
-          </div>
-
-          <div className="flex-grow flex flex-wrap justify-center gap-2 md:gap-4 px-4 border-l border-r border-white/5 z-10">
-            {prizeBreakdown.isScoreChange ? (
-              <div className="flex items-center gap-4">
-                <div className="px-4 py-2 bg-green-500/10 rounded-xl border border-green-500/20 text-center">
-                  <span className="text-[8px] font-black text-green-400 uppercase block">Score Change Prize</span>
-                  <span className="text-sm font-black text-white">${prizeBreakdown.perChange} <span className="text-[10px] text-green-400">({prizeBreakdown.multiplier}x)</span></span>
-                </div>
-                <div className="w-[1px] h-6 bg-white/10 self-center"></div>
-                <div className="flex flex-col items-center">
-                   <span className="text-[7px] font-black text-indigo-400 uppercase tracking-widest">Charity</span>
-                   <span className="text-xs md:text-sm font-black text-white">${prizeBreakdown.charity?.toFixed(0)}</span>
-                </div>
+          {activePool?.settings?.rules ? (
+            <div className="hidden print:block mt-8 px-4 print:px-0">
+              <div className="rounded-[2rem] border border-indigo-200 bg-white p-6 text-indigo-900 print:shadow-none">
+                <div className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-600 mb-3">Contest Rules</div>
+                <div className="whitespace-pre-wrap text-sm leading-6">{activePool.settings.rules}</div>
               </div>
-            ) : (
-              <>
-                <div className="flex flex-col items-center">
-                   <span className="text-[7px] font-black text-indigo-400 uppercase tracking-widest">Q1</span>
-                   <span className="text-xs md:text-sm font-black text-white">${prizeBreakdown.q1?.toFixed(0)}</span>
-                </div>
-                <div className="w-[1px] h-6 bg-white/10 self-center"></div>
-                <div className="flex flex-col items-center">
-                   <span className="text-[7px] font-black text-indigo-400 uppercase tracking-widest">Half</span>
-                   <span className="text-xs md:text-sm font-black text-white">${prizeBreakdown.half?.toFixed(0)}</span>
-                </div>
-                <div className="w-[1px] h-6 bg-white/10 self-center"></div>
-                <div className="flex flex-col items-center">
-                   <span className="text-[7px] font-black text-indigo-400 uppercase tracking-widest">Q3</span>
-                   <span className="text-xs md:text-sm font-black text-white">${prizeBreakdown.q3?.toFixed(0)}</span>
-                </div>
-                <div className="w-[1px] h-6 bg-white/10 self-center"></div>
-                <div className="flex flex-col items-center">
-                   <span className="text-[7px] font-black text-indigo-400 uppercase tracking-widest">Final</span>
-                   <span className="text-xs md:text-sm font-black text-white">${prizeBreakdown.final?.toFixed(0)}</span>
-                </div>
-                <div className="w-[1px] h-6 bg-white/10 self-center"></div>
-                <div className="flex flex-col items-center">
-                   <span className="text-[7px] font-black text-green-400 uppercase tracking-widest">Charity</span>
-                   <span className="text-xs md:text-sm font-black text-green-400">${prizeBreakdown.charity?.toFixed(0)}</span>
-                </div>
-              </>
+            </div>
+          ) : null}
+          <div className="grid-controls w-full max-w-5xl flex flex-col md:flex-row items-center justify-between mb-8 print-hidden px-4 gap-4 z-[90] relative">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2 relative">
+                <button
+                  type="button"
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  className="bg-white text-indigo-900 px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center gap-3 border-2 border-indigo-100 shadow-xl cursor-pointer active:scale-95 select-none"
+                >
+                  <i className="fas fa-file-export text-indigo-600"></i> Export & Print
+                  <i className={`fas fa-chevron-${showExportMenu ? 'up' : 'down'} text-[8px] transition-transform`}></i>
+                </button>
+
+                {showExportMenu && (
+                  <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-indigo-50 p-2 animate-in slide-in-from-top-2 duration-200 z-[100]">
+                    <button onClick={handleStandardPrint} className="w-full text-left px-4 py-3 hover:bg-indigo-50 rounded-xl flex items-center gap-3 transition-colors">
+                      <i className="fas fa-desktop text-indigo-400 text-xs"></i>
+                      <div>
+                        <p className="text-[10px] font-black text-indigo-900 uppercase">Browser Print</p>
+                        <p className="text-[8px] text-gray-400 font-bold uppercase">Standard system dialog</p>
+                      </div>
+                    </button>
+                    <button onClick={handleIsolatedPrint} className="w-full text-left px-4 py-3 hover:bg-indigo-50 rounded-xl flex items-center gap-3 transition-colors">
+                      <i className="fas fa-window-maximize text-indigo-400 text-xs"></i>
+                      <div>
+                        <p className="text-[10px] font-black text-indigo-900 uppercase">Isolated Print View</p>
+                        <p className="text-[8px] text-gray-400 font-bold uppercase">Best for mobile & tablets</p>
+                      </div>
+                    </button>
+                    <div className="h-[1px] bg-indigo-50 my-1"></div>
+                    <button onClick={handleExportCSV} className="w-full text-left px-4 py-3 hover:bg-green-50 rounded-xl flex items-center gap-3 transition-colors">
+                      <i className="fas fa-file-csv text-green-500 text-xs"></i>
+                      <div>
+                        <p className="text-[10px] font-black text-indigo-900 uppercase">Export Grid CSV</p>
+                        <p className="text-[8px] text-gray-400 font-bold uppercase">Download mapping data</p>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {pendingSelection.length > 0 && (
+              <div className="fixed bottom-3 right-3 md:bottom-5 md:right-5 z-[120]">
+                <button
+                  onClick={onCheckout}
+                  className="bg-green-600 text-white px-16 py-6 md:px-24 md:py-8 rounded-[1.8rem] text-[14px] md:text-[18px] font-black uppercase tracking-[0.24em] hover:scale-105 active:scale-95 transition-all flex items-center gap-4 shadow-[0_20px_55px_rgba(22,163,74,0.55)] border-4 border-white/25 backdrop-blur-sm"
+                >
+                  <i className="fas fa-shopping-cart text-[16px] md:text-[20px]"></i> Claim {pendingSelection.length} Box{pendingSelection.length > 1 ? 'es' : ''}
+                </button>
+              </div>
             )}
           </div>
 
-          <div className="flex flex-wrap justify-center md:justify-end gap-3 flex-shrink-0 z-10">
-             <div className="px-4 py-2 bg-white/5 rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] backdrop-blur-sm">
-                <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Money Pledged</span>
-                <span className="text-base font-black text-indigo-200">{formatMoney(stats.totalCommitted)}</span>
-             </div>
-             <div className="px-4 py-2 bg-white/5 rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] backdrop-blur-sm">
-                <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Raised So Far</span>
-                <span className="text-base font-black text-white">{formatMoney(stats.totalRaised)}</span>
-             </div>
-             <div className="px-4 py-2 bg-white/5 rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] backdrop-blur-sm shadow-lg border-indigo-500/30 bg-indigo-500/5">
-                <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Winners Total</span>
-                <span className="text-base font-black text-indigo-300">{formatMoney(actualWinnersTotal)}</span>
-             </div>
-             <div className="px-4 py-2 bg-white/5 rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] backdrop-blur-sm">
-                <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Boxes Left</span>
-                <span className="text-base font-black text-white">{stats.remaining}</span>
-             </div>
-             <div className="px-4 py-2 bg-white/10 rounded-2xl border border-white/20 flex flex-col items-center min-w-[90px] backdrop-blur-sm bg-indigo-500/10">
-                <span className="text-[8px] font-black text-indigo-200 uppercase tracking-widest">Cost/Box</span>
-                <span className="text-base font-black text-white">{formatMoney(settings.costPerBox || 10)}</span>
-             </div>
-          </div>
-        </div>
-      </div>
+          <div className="w-full max-w-6xl mb-6 px-4 print-hidden">
+            <div className="bg-indigo-900 rounded-[2rem] p-6 shadow-2xl flex flex-col lg:flex-row items-center justify-between gap-6 border-b-4 border-indigo-950 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
+                <i className="fas fa-football-ball text-[120px] rotate-12"></i>
+              </div>
 
-      <div className="status-bar w-full max-w-2xl mb-6 px-4 print-hidden">
-        <div className="flex items-center justify-between bg-white border border-indigo-100 rounded-2xl p-4 shadow-sm">
-          <div className="flex flex-col">
-            <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Contest Availability</span>
-            <p className="text-xl font-black text-indigo-900 uppercase leading-none mt-1">{stats.remaining} <span className="text-sm font-bold text-gray-400 ml-1">Boxes Left</span></p>
-          </div>
-          <div className="flex gap-2">
-            <div className="h-2 w-32 bg-gray-100 rounded-full overflow-hidden self-center">
-              <div className={`h-full transition-all duration-1000 ${stats.remaining < 10 ? 'bg-red-500' : 'bg-indigo-500'}`} style={{ width: `${stats.assigned}%` }}></div>
+              <div className="flex items-center gap-4 w-full lg:w-auto z-10">
+                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-white flex-shrink-0">
+                  <i className="fas fa-hand-holding-heart text-xl"></i>
+                </div>
+                <div>
+                  <p className="text-indigo-300 text-[9px] font-black uppercase tracking-widest">Charity Impact Goal</p>
+                  <h3 className="text-xl font-black text-white uppercase leading-none mt-1 whitespace-nowrap">
+                    {formatMoney(stats.totalRaised)} <span className="text-indigo-400">/ {formatMoney(stats.potentialTotal)} Raised</span>
+                  </h3>
+                </div>
+              </div>
+
+              <div className="flex-grow flex flex-wrap justify-center gap-2 md:gap-4 px-4 border-l border-r border-white/5 z-10">
+                {prizeBreakdown.isScoreChange ? (
+                  <div className="flex items-center gap-4">
+                    <div className="px-4 py-2 bg-green-500/10 rounded-xl border border-green-500/20 text-center">
+                      <span className="text-[8px] font-black text-green-400 uppercase block">Score Change Prize</span>
+                      <span className="text-sm font-black text-white">${prizeBreakdown.perChange} <span className="text-[10px] text-green-400">({prizeBreakdown.multiplier}x)</span></span>
+                    </div>
+                    <div className="w-[1px] h-6 bg-white/10 self-center"></div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-[7px] font-black text-indigo-400 uppercase tracking-widest">Charity</span>
+                      <span className="text-xs md:text-sm font-black text-white">${prizeBreakdown.charity?.toFixed(0)}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col items-center">
+                      <span className="text-[7px] font-black text-indigo-400 uppercase tracking-widest">Q1</span>
+                      <span className="text-xs md:text-sm font-black text-white">${prizeBreakdown.q1?.toFixed(0)}</span>
+                    </div>
+                    <div className="w-[1px] h-6 bg-white/10 self-center"></div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-[7px] font-black text-indigo-400 uppercase tracking-widest">Half</span>
+                      <span className="text-xs md:text-sm font-black text-white">${prizeBreakdown.half?.toFixed(0)}</span>
+                    </div>
+                    <div className="w-[1px] h-6 bg-white/10 self-center"></div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-[7px] font-black text-indigo-400 uppercase tracking-widest">Q3</span>
+                      <span className="text-xs md:text-sm font-black text-white">${prizeBreakdown.q3?.toFixed(0)}</span>
+                    </div>
+                    <div className="w-[1px] h-6 bg-white/10 self-center"></div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-[7px] font-black text-indigo-400 uppercase tracking-widest">Final</span>
+                      <span className="text-xs md:text-sm font-black text-white">${prizeBreakdown.final?.toFixed(0)}</span>
+                    </div>
+                    <div className="w-[1px] h-6 bg-white/10 self-center"></div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-[7px] font-black text-green-400 uppercase tracking-widest">Charity</span>
+                      <span className="text-xs md:text-sm font-black text-green-400">${prizeBreakdown.charity?.toFixed(0)}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="flex flex-wrap justify-center md:justify-end gap-3 flex-shrink-0 z-10">
+                <div className="px-4 py-2 bg-white/5 rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] backdrop-blur-sm">
+                  <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Money Pledged</span>
+                  <span className="text-base font-black text-indigo-200">{formatMoney(stats.totalCommitted)}</span>
+                </div>
+                <div className="px-4 py-2 bg-white/5 rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] backdrop-blur-sm">
+                  <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Raised So Far</span>
+                  <span className="text-base font-black text-white">{formatMoney(stats.totalRaised)}</span>
+                </div>
+                <div className="px-4 py-2 bg-white/5 rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] backdrop-blur-sm shadow-lg border-indigo-500/30 bg-indigo-500/5">
+                  <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Winners Total</span>
+                  <span className="text-base font-black text-indigo-300">{formatMoney(actualWinnersTotal)}</span>
+                </div>
+                <div className="px-4 py-2 bg-white/5 rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] backdrop-blur-sm">
+                  <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Boxes Left</span>
+                  <span className="text-base font-black text-white">{stats.remaining}</span>
+                </div>
+                <div className="px-4 py-2 bg-white/10 rounded-2xl border border-white/20 flex flex-col items-center min-w-[90px] backdrop-blur-sm bg-indigo-500/10">
+                  <span className="text-[8px] font-black text-indigo-200 uppercase tracking-widest">Cost/Box</span>
+                  <span className="text-base font-black text-white">{formatMoney(settings.costPerBox || 10)}</span>
+                </div>
+              </div>
             </div>
-            <span className="text-[10px] font-black text-indigo-900">{stats.assigned}% Full</span>
           </div>
-        </div>
-      </div>
 
-      <div className="w-full max-w-4xl space-y-6 px-4 mb-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-indigo-50/50 p-6 md:p-8 rounded-[2rem] border border-indigo-100 backdrop-blur-sm print-hidden">
-            <h3 className="font-black text-indigo-900 uppercase tracking-tight text-xs md:text-sm mb-6 flex items-center gap-2">
-              <i className="fas fa-info-circle text-indigo-400"></i> Box Status Legend
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-               <div className="flex items-center gap-2 p-3 bg-green-50 rounded-xl border border-green-100"><i className="fas fa-check-circle text-green-600"></i><span className="font-black text-green-900 uppercase text-[9px]">Fully Paid</span></div>
-               <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-xl border border-orange-100"><i className="fas fa-dot-circle text-orange-500"></i><span className="font-black text-orange-900 uppercase text-[9px]">Partial</span></div>
-               <div className="flex items-center gap-2 p-3 bg-yellow-100 rounded-xl border border-yellow-200"><i className="fas fa-trophy text-yellow-600"></i><span className="font-black text-yellow-900 uppercase text-[9px]">Winner</span></div>
-               <div className="flex items-center gap-2 p-3 bg-indigo-600 rounded-xl border border-indigo-700"><i className="fas fa-shopping-cart text-white"></i><span className="font-black text-white uppercase text-[9px]">In Cart</span></div>
+          <div className="status-bar w-full max-w-2xl mb-6 px-4 print-hidden">
+            <div className="flex items-center justify-between bg-white border border-indigo-100 rounded-2xl p-4 shadow-sm">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Contest Availability</span>
+                <p className="text-xl font-black text-indigo-900 uppercase leading-none mt-1">{stats.remaining} <span className="text-sm font-bold text-gray-400 ml-1">Boxes Left</span></p>
+              </div>
+              <div className="flex gap-2">
+                <div className="h-2 w-32 bg-gray-100 rounded-full overflow-hidden self-center">
+                  <div className={`h-full transition-all duration-1000 ${stats.remaining < 10 ? 'bg-red-500' : 'bg-indigo-500'}`} style={{ width: `${stats.assigned}%` }}></div>
+                </div>
+                <span className="text-[10px] font-black text-indigo-900">{stats.assigned}% Full</span>
+              </div>
             </div>
           </div>
 
-          <div className="bg-white border-2 border-green-100 p-6 md:p-8 rounded-[2rem] shadow-sm relative overflow-hidden">
-             <div className="absolute -top-4 -right-4 opacity-5 rotate-12"><i className="fas fa-trophy text-6xl text-green-600"></i></div>
-             <h3 className="font-black text-indigo-900 uppercase tracking-tight text-xs md:text-sm mb-6 flex items-center justify-between gap-2 relative z-10">
-                <span className="flex items-center gap-2">
-                  <i className="fas fa-trophy text-green-500"></i> Live Winner Breakdown
-                </span>
-                <span className="text-indigo-400 font-bold leading-none">Total Winnings: {formatMoney(actualWinnersTotal)}</span>
-             </h3>
-             {liveWinners.length === 0 ? (
-               <div className="h-24 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-2xl">
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Awaiting Kickoff</p>
-               </div>
-             ) : (
-               <div className="space-y-3 max-h-48 overflow-y-auto scrollbar-hide">
-                  {liveWinners.map((w, idx) => (
-                    <div key={idx} className={`p-3 rounded-xl flex items-center justify-between border-b last:border-0 ${idx === 0 ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100'}`}>
-                       <div className="flex items-center gap-3">
+          <div className="w-full max-w-4xl space-y-6 px-4 mb-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-indigo-50/50 p-6 md:p-8 rounded-[2rem] border border-indigo-100 backdrop-blur-sm print-hidden">
+                <h3 className="font-black text-indigo-900 uppercase tracking-tight text-xs md:text-sm mb-6 flex items-center gap-2">
+                  <i className="fas fa-info-circle text-indigo-400"></i> Box Status Legend
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center gap-2 p-3 bg-green-50 rounded-xl border border-green-100"><i className="fas fa-check-circle text-green-600"></i><span className="font-black text-green-900 uppercase text-[9px]">Fully Paid</span></div>
+                  <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-xl border border-orange-100"><i className="fas fa-dot-circle text-orange-500"></i><span className="font-black text-orange-900 uppercase text-[9px]">Partial</span></div>
+                  <div className="flex items-center gap-2 p-3 bg-yellow-100 rounded-xl border border-yellow-200"><i className="fas fa-trophy text-yellow-600"></i><span className="font-black text-yellow-900 uppercase text-[9px]">Winner</span></div>
+                  <div className="flex items-center gap-2 p-3 bg-indigo-600 rounded-xl border border-indigo-700"><i className="fas fa-shopping-cart text-white"></i><span className="font-black text-white uppercase text-[9px]">In Cart</span></div>
+                </div>
+              </div>
+
+              <div className="bg-white border-2 border-green-100 p-6 md:p-8 rounded-[2rem] shadow-sm relative overflow-hidden">
+                <div className="absolute -top-4 -right-4 opacity-5 rotate-12"><i className="fas fa-trophy text-6xl text-green-600"></i></div>
+                <h3 className="font-black text-indigo-900 uppercase tracking-tight text-xs md:text-sm mb-6 flex items-center justify-between gap-2 relative z-10">
+                  <span className="flex items-center gap-2">
+                    <i className="fas fa-trophy text-green-500"></i> Live Winner Breakdown
+                  </span>
+                  <span className="text-indigo-400 font-bold leading-none">Total Winnings: {formatMoney(actualWinnersTotal)}</span>
+                </h3>
+                {liveWinners.length === 0 ? (
+                  <div className="h-24 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-2xl">
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Awaiting Kickoff</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-48 overflow-y-auto scrollbar-hide">
+                    {liveWinners.map((w, idx) => (
+                      <div key={idx} className={`p-3 rounded-xl flex items-center justify-between border-b last:border-0 ${idx === 0 ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100'}`}>
+                        <div className="flex items-center gap-3">
                           <span className="text-[8px] font-black uppercase text-indigo-400 w-12">{w.label}</span>
                           <span className="text-xs font-black text-indigo-900">{w.winner}</span>
-                       </div>
-                       <div className="text-right">
+                        </div>
+                        <div className="text-right">
                           <p className="text-[10px] font-black text-gray-950">{formatMoney(w.totalPayout)}</p>
                           <p className="text-[7px] font-bold text-gray-400 uppercase leading-none mt-0.5">Score: {w.latestScore}</p>
-                    </div>
-                    </div>
-                  ))}
-               </div>
-             )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

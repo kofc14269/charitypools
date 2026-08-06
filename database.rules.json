@@ -3,7 +3,20 @@
     "users": {
       "$uid": {
         ".read": true,
-        ".write": "$uid === auth.uid || (auth.token != null && auth.token.email === 'kofc14269@gmail.com')"
+        "state": {
+          "pools": {
+            ".write": true
+          },
+          "participants": {
+            ".write": true
+          },
+          "globalSettings": {
+            ".write": "$uid === auth.uid || (auth.token != null && auth.token.email === 'kofc14269@gmail.com')"
+          },
+          "activePoolId": {
+            ".write": "$uid === auth.uid || (auth.token != null && auth.token.email === 'kofc14269@gmail.com')"
+          }
+        }
       }
     },
     "state": {

@@ -29,7 +29,7 @@ function makeProps(overrides: Partial<any> = {}) {
     id: 'pool-1',
     name: 'Pool 1',
     type: 'squares',
-    squares: Array.from({ length: 100 }).map((_, i) => ({ id: i, row: Math.floor(i/10), col: i%10, participantId: null, alias: '', paidAmount: 0, assigned: false })),
+    squares: Array.from({ length: 100 }).map((_, i) => ({ id: i, row: Math.floor(i / 10), col: i % 10, participantId: null, alias: '', paidAmount: 0, assigned: false })),
     participants: [],
     settings: basePoolSettings,
     scores: [],
@@ -64,7 +64,8 @@ function makeProps(overrides: Partial<any> = {}) {
     onSwitchPool: vi.fn(),
     onCreatePool: vi.fn(),
     fullState: { pools: [pool], activePoolId: pool.id, globalSettings: global } as AppState,
-    onImportState: vi.fn()
+    onImportState: vi.fn(),
+    onSignOut: vi.fn()
   };
   return { ...defaults, ...overrides };
 }
@@ -103,7 +104,7 @@ describe('AdminPanel — participants (unit)', () => {
       id: 'pool-1',
       name: 'Pool 1',
       type: 'squares',
-      squares: Array.from({ length: 100 }).map((_, i) => ({ id: i, row: Math.floor(i/10), col: i%10, participantId: i === 5 ? '123' : null, alias: '', paidAmount: 0, assigned: i === 5 })),
+      squares: Array.from({ length: 100 }).map((_, i) => ({ id: i, row: Math.floor(i / 10), col: i % 10, participantId: i === 5 ? '123' : null, alias: '', paidAmount: 0, assigned: i === 5 })),
       participants: [],
       settings: basePoolSettings,
       scores: [],

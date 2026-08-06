@@ -11,9 +11,10 @@ import AdminGlobalSettings from './admin/AdminGlobalSettings';
 import AdminPoolOptions from './admin/AdminPoolOptions';
 import { calculateFinancialSummary } from '../utils/finance';
 
-type AdminSection = 'overview' | 'pools' | 'options' | 'participants' | 'winners' | 'stats' | 'branding' | 'danger';
+type AdminSection = 'overview' | 'pools' | 'options' | 'participants' | 'winners' | 'stats' | 'branding' | 'danger' | 'logout';
 
 interface AdminPanelProps {
+  onSignOut: () => void;
   ownerUid: string;
   pools: Pool[];
   activePoolId: string;
@@ -76,7 +77,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   allParticipants,
   scores
 }) => {
-  const [activeSection, setActiveSection] = useState<AdminSection>('overview');
+  const [activeSection, setActiveSection] = useState<AdminSection>('pools');
   const [showAddNameForm, setShowAddNameForm] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingParticipantId, setEditingParticipantId] = useState<string | null>(null);
@@ -214,14 +215,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const isSquares = activePool?.type === 'squares';
 
   const menuItems: Array<{ id: AdminSection; label: string; icon: string }> = [
-    { id: 'overview', label: 'Overview', icon: 'fa-th-large' },
     { id: 'pools', label: 'Contests', icon: 'fa-gamepad' },
-    { id: 'options', label: isSquares ? 'Squares Options' : 'Pool Options', icon: 'fa-sliders-h' },
     { id: 'participants', label: activePool?.type === '13run' ? 'Draft Board' : 'Names & Teams', icon: 'fa-users' },
     { id: 'winners', label: 'Winners', icon: 'fa-trophy' },
     { id: 'stats', label: 'Participants', icon: 'fa-chart-bar' },
     { id: 'branding', label: 'Organization & Style', icon: 'fa-palette' },
     { id: 'danger', label: 'Danger Zone', icon: 'fa-exclamation-triangle' },
+    { id: 'logout', label: 'Log Out', icon: 'fa-sign-out-alt' },
   ];
 
   return (
@@ -249,7 +249,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               {menuItems.map(item => (
                 <button
                   key={item.id}
-                  onClick={() => setActiveSection(item.id)}
+                  onClick={() => item.id === 'logout' ? onSignOut() : setActiveSection(item.id)}
                   className={`flex items-center gap-4 px-6 py-4 rounded-[1.5rem] font-black uppercase text-[10px] tracking-wider transition-all ${activeSection === item.id ? 'bg-indigo-900 text-white shadow-lg' : 'text-indigo-400 hover:bg-indigo-50 hover:text-indigo-900'}`}
                 >
                   <i className={`fas ${item.icon} w-5 text-center text-[12px]`}></i>
@@ -268,6 +268,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 showCreateForm={showCreateForm} setShowCreateForm={setShowCreateForm}
                 newPoolData={newPoolData} setNewPoolData={setNewPoolData}
                 handleCreatePool={handleCreatePool} onSwitchPool={onSwitchPool} onDeletePool={onDeletePool}
+                onEditPoolRules={(id) => { onSwitchPool(id); setActiveSection('options'); }}
               />
             )}
 
@@ -400,6 +401,49 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   );
                 })()}
+
+                {/* All Participants Registry */}
+                {activePool?.type !== '13run' && participants.length > 0 && (
+                  <div className="mt-8 bg-indigo-50/30 rounded-[2rem] border border-indigo-50 overflow-hidden">
+                    <div className="px-6 py-4 border-b border-indigo-100 flex items-center justify-between">
+                      <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Manage Participants</h4>
+                      <span className="text-[9px] font-bold text-indigo-300 uppercase">{participants.length} total</span>
+                    </div>
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-indigo-100">
+                          <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Square #</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Participant</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Alias</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Contact</th>
+                          <th className="px-6 py-4 text-right"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {participants.map(p => (
+                          <tr key={p.id} className="border-b border-indigo-50">
+                            <td className="px-6 py-4 font-black text-indigo-400 text-sm">
+                              {squares.filter(sq => sq.participantId === p.id).length > 0
+                                ? squares.filter(sq => sq.participantId === p.id).map(sq => `#${sq.id + 1}`).join(', ')
+                                : <span className="text-indigo-200 text-[10px]">None</span>}
+                            </td>
+                            <td className="px-6 py-4 font-black text-indigo-900 text-sm uppercase">{p.name}</td>
+                            <td className="px-6 py-4 text-indigo-500 font-black text-[11px] uppercase">{p.alias || '--'}</td>
+                            <td className="px-6 py-4 text-indigo-400 font-bold text-[10px]">{p.email || p.phone || '--'}</td>
+                            <td className="px-6 py-4 text-right">
+                              <button
+                                onClick={() => handleEditParticipant(p)}
+                                className="text-indigo-500 hover:text-indigo-800 px-3 py-1 font-black uppercase text-[9px] tracking-tighter"
+                              >
+                                Edit Entry
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 
@@ -418,6 +462,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 handleLogoFile={handleLogoFile} setAndValidateLogoUrl={setAndValidateLogoUrl}
               />
             )}
+
 
             {activeSection === 'stats' && (
               <Stats

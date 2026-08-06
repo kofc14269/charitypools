@@ -77,6 +77,7 @@ function makeProps(overrides: Record<string, unknown> = {}) {
         participants: pool.participants,
         allParticipants: pool.participants,
         scores: [],
+        onSignOut: vi.fn(),
         ...overrides,
     };
 }

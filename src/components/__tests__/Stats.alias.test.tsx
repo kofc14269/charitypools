@@ -50,7 +50,7 @@ describe('Stats participant identity display', () => {
                 col: id % 10,
                 participantId: id === 0 ? 'p-1' : null,
                 alias: id === 0 ? 'RICK M' : '',
-                paidAmount: 0,
+                paidAmount: id === 0 ? 5 : 0,
                 assigned: id === 0
             })),
             settings,
