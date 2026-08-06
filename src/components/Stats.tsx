@@ -17,8 +17,8 @@ interface StatsProps {
   onUpdateScore: (score: ScoreEntry) => void;
   onUnassignSquare: (id: number) => void;
   onClearUserBoxes: (participantId: string) => void;
-  onApplyPayment: (participantId: string, amount: number, method: string, note?: string) => void;
-  onEditPayment: (participantId: string, transactionId: string, amount: number, method: string, note?: string) => void;
+  onApplyPayment: (participantId: string, amount: number, method: string, note?: string, timestamp?: number) => void;
+  onEditPayment: (participantId: string, transactionId: string, amount: number, method: string, note?: string, timestamp?: number) => void;
   onDeletePayment: (participantId: string, transactionId: string) => void;
 }
 
@@ -43,6 +43,7 @@ const Stats: React.FC<StatsProps> = ({
   const [editModalParticipant, setEditModalParticipant] = useState<Participant | null>(null);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [paymentNote, setPaymentNote] = useState('');
   const [editingWinningsTransactionId, setEditingWinningsTransactionId] = useState<string | null>(null);
@@ -206,6 +207,7 @@ const Stats: React.FC<StatsProps> = ({
     const balance = Math.max(0, p.netOwed || 0);
     setPaymentModalParticipant(p);
     setEditingTransactionId(null);
+    setPaymentDate(new Date().toISOString().split('T')[0]);
     setPaymentAmount(balance > 0 ? balance.toString() : '');
     setPaymentMethod('Cash');
     setPaymentNote('');
@@ -215,9 +217,10 @@ const Stats: React.FC<StatsProps> = ({
     e.preventDefault();
     if (!paymentModalParticipant) return;
     const amount = parseFloat(paymentAmount);
+    const parsedDate = new Date(paymentDate + 'T12:00:00Z').getTime();
     if (!isNaN(amount) && amount >= 0) {
-      if (editingTransactionId) onEditPayment(paymentModalParticipant.id, editingTransactionId, amount, paymentMethod, paymentNote);
-      else onApplyPayment(paymentModalParticipant.id, amount, paymentMethod, paymentNote);
+      if (editingTransactionId) onEditPayment(paymentModalParticipant.id, editingTransactionId, amount, paymentMethod, paymentNote, parsedDate);
+      else onApplyPayment(paymentModalParticipant.id, amount, paymentMethod, paymentNote, parsedDate);
       setPaymentModalParticipant(null);
       setEditingTransactionId(null);
       setPaymentNote('');
@@ -409,6 +412,7 @@ const Stats: React.FC<StatsProps> = ({
             </div>
             <form onSubmit={handleConfirmPayment} className="p-6 space-y-4">
               <div><label htmlFor="payment-amount" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Amount ($)</label><input id="payment-amount" required autoFocus type="number" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="w-full p-4 bg-gray-50 rounded-xl font-black text-lg outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+              <div><label htmlFor="payment-date" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Date</label><input id="payment-date" required type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="w-full p-4 bg-gray-50 rounded-xl font-black text-lg outline-none focus:ring-2 focus:ring-indigo-500" /></div>
               <div><label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Method</label><div className="grid grid-cols-2 gap-2">{['Cash', 'Check', 'Zelle', 'Other'].map(m => (<button key={m} type="button" onClick={() => setPaymentMethod(m)} className={`py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${paymentMethod === m ? 'bg-indigo-900 text-white' : 'bg-white text-gray-400'}`}>{m}</button>))}</div></div>
               <button type="submit" className={`w-full bg-green-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl`}>Confirm Payment</button>
             </form>
@@ -484,6 +488,7 @@ const Stats: React.FC<StatsProps> = ({
                             type="button"
                             onClick={() => {
                               setEditingTransactionId(t.id);
+                              setPaymentDate(new Date(t.timestamp).toISOString().split('T')[0]);
                               setPaymentAmount(String(t.amount));
                               setPaymentMethod(t.method || 'Cash');
                               setPaymentNote(t.note || '');

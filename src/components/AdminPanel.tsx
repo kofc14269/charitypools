@@ -28,8 +28,8 @@ interface AdminPanelProps {
   onUpdateParticipant: (participantId: string, updates: Partial<Participant>) => void;
   onUnassignSquare: (squareId: number) => void;
   onClearUserBoxes: (participantId: string) => void;
-  onApplyPayment: (participantId: string, amount: number, method: string) => void;
-  onEditPayment: (participantId: string, transactionId: string, amount: number, method: string) => void;
+  onApplyPayment: (participantId: string, amount: number, method: string, note?: string, timestamp?: number) => void;
+  onEditPayment: (participantId: string, transactionId: string, amount: number, method: string, note?: string, timestamp?: number) => void;
   onDeletePayment: (participantId: string, transactionId: string) => void;
   onResetGrid: () => void;
   onAddScore: (score: ScoreEntry) => void;

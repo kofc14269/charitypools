@@ -647,12 +647,12 @@ const App: React.FC = () => {
     update(ref(db), updates);
   }, [state, activePool, ownerUid]);
 
-  const handleApplyPayment = useCallback((participantId: string, amount: number, method: string, note?: string) => {
+  const handleApplyPayment = useCallback((participantId: string, amount: number, method: string, note?: string, timestamp?: number) => {
     if (!state || !activePool) return;
     const targetPoolId = resolveTargetPoolId(state, activePool);
     const newParticipants = activePool.participants.map(p => {
       if (p.id === participantId) {
-        const transaction: any = { id: crypto.randomUUID(), amount, method, timestamp: Date.now() };
+        const transaction: any = { id: crypto.randomUUID(), amount, method, timestamp: timestamp || Date.now() };
         if (note && note.trim() !== '') transaction.note = note.trim();
         return {
           ...p,
@@ -664,7 +664,7 @@ const App: React.FC = () => {
     atomicUpdateFinancials(participantId, newParticipants);
   }, [state, activePool, atomicUpdateFinancials]);
 
-  const handleEditPayment = useCallback((participantId: string, transactionId: string, amount: number, method: string, note?: string) => {
+  const handleEditPayment = useCallback((participantId: string, transactionId: string, amount: number, method: string, note?: string, timestamp?: number) => {
     if (!state || !activePool) return;
     const newParticipants = activePool.participants.map(p => {
       if (p.id === participantId) {
@@ -672,10 +672,7 @@ const App: React.FC = () => {
           ...p,
           paymentHistory: (p.paymentHistory || []).map(t => {
             if (t.id === transactionId) {
-              const updated: any = { ...t, amount, method };
-              if (note && note.trim() !== '') updated.note = note.trim();
-              else delete updated.note;
-              return updated;
+              return { ...t, amount, method, note: note || '', timestamp: timestamp || t.timestamp };
             }
             return t;
           })
