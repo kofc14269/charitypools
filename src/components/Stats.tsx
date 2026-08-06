@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Square, GameSettings, Participant, PaymentTransaction, ScoreEntry, Pool, ThirteenRunData } from '../types';
 import { solvePayoutForEntry, calculateFinancialSummary, parseCustomPayoutValue } from '../utils/finance';
+import { exportPoolCsv } from '../utils/exportCsv';
 
 const WINNINGS_PAYMENT_METHODS = ['Cash', 'Check', 'Zelle', 'Other'];
 
@@ -347,8 +348,13 @@ const Stats: React.FC<StatsProps> = ({
       <div className="bg-white border border-gray-100 rounded-2xl md:rounded-[2.5rem] overflow-hidden shadow-xl">
         <div className="p-4 md:p-8 border-b bg-gray-50 flex items-center justify-between">
           <h3 className="text-lg md:text-xl font-black text-gray-900 uppercase">Participants & Contributions</h3>
-          <div className="relative w-64">
-            <input type="text" placeholder="Filter names..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-4 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
+          <div className="flex items-center gap-4">
+            <button type="button" onClick={() => activePool && exportPoolCsv(activePool, participants, squares)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest transition-colors shadow-sm whitespace-nowrap">
+              <i className="fas fa-file-csv mr-2"></i>Export CSV
+            </button>
+            <div className="relative w-48 md:w-64">
+              <input type="text" placeholder="Filter names..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-4 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
+            </div>
           </div>
         </div>
         <div className="overflow-x-auto">
