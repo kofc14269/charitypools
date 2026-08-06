@@ -21,6 +21,7 @@ const Winners = lazy(() => import('./components/Winners'));
 const PlayerProfile = lazy(() => import('./components/PlayerProfile'));
 const SurvivorEngine = lazy(() => import('./components/SurvivorEngine'));
 const ThirteenRunEngine = lazy(() => import('./components/ThirteenRunEngine'));
+const PoolPortal = lazy(() => import('./components/PoolPortal'));
 import { fetchScores, GameEvent } from './services/sportsApi';
 import { resolveTargetPoolId } from './utils/poolTarget';
 
@@ -116,7 +117,10 @@ const getHeaderLogoFallback = (label: string) => {
 const App: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [isFirebaseLoaded, setIsFirebaseLoaded] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>('grid');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('p') ? 'grid' : 'portal';
+  });
   const [selectedSquareId, setSelectedSquareId] = useState<number | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [pendingSelection, setPendingSelection] = useState<number[]>([]);
@@ -939,6 +943,7 @@ const App: React.FC = () => {
                 const showAdminTab = isAdminAuthenticated || showAdminOption;
 
                 const tabs: Array<{ id: Tab; icon: string; label: string }> = [
+                  { id: 'portal', icon: 'fa-list', label: 'All Pools' },
                   gameTab as any,
                   { id: 'winners', icon: 'fa-trophy', label: 'Winners' },
                   { id: 'player', icon: 'fa-user-check', label: 'My Entry' }
@@ -977,6 +982,16 @@ const App: React.FC = () => {
 
       <main ref={mainRef} className="flex-1 min-h-0 max-w-7xl mx-auto w-full p-4 md:p-8 overflow-y-auto overflow-x-hidden">
 
+        {activeTab === 'portal' && (
+          <Suspense fallback={<div className="p-12 text-center font-black uppercase text-indigo-300">Loading Portal...</div>}>
+            <PoolPortal
+              pools={state?.pools || []}
+              onSelectPool={(id) => {
+                window.location.href = window.location.pathname + '?p=' + id + (ownerUid ? '&u=' + ownerUid : '');
+              }}
+            />
+          </Suspense>
+        )}
 
         {activeTab === 'grid' && (activePool?.type === 'squares' || !activePool?.type) && (
           (!state || !state.pools || state.pools.length === 0) ? (

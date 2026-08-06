@@ -151,4 +151,4 @@ export interface AppState {
   globalSettings: GlobalSettings;
 }
 
-export type Tab = 'grid' | 'winners' | 'admin' | 'player' | 'survivor' | '13run';
+export type Tab = 'portal' | 'grid' | 'winners' | 'admin' | 'player' | 'survivor' | '13run';
