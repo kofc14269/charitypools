@@ -58,9 +58,19 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
 
     calculate(); // Run immediately on mount
     window.addEventListener('resize', handleResize);
+    window.visualViewport?.addEventListener('resize', handleResize);
+
+    // The contest can resize without a window resize (navigation changes,
+    // orientation UI, split-screen, or an embedded web view). Observe the
+    // actual available width so the board always re-fits itself.
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(gridRef.current);
+
     return () => {
       clearTimeout(debounceTimer);
       window.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
     };
   }, []);
 
@@ -253,10 +263,10 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
     <div className="flex flex-col items-center w-full relative">
       <div
         ref={gridRef}
-        className="w-full overflow-hidden pb-4 print:overflow-visible relative flex justify-center"
+        className="w-full overflow-hidden pb-4 print:overflow-visible relative flex flex-col items-center"
       >
         <div
-          className="inline-block p-4 print:p-0 min-w-max print:zoom-100 print:scale-90 print:origin-top"
+          className="inline-block flex-shrink-0 p-4 print:p-0 min-w-max print:zoom-100 print:scale-90 print:origin-top"
           style={{ zoom: zoom }}
         >
           <div className="hidden print:block mb-6 text-center">
@@ -375,6 +385,8 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
               </div>
             </div>
           ) : null}
+        </div>
+
           <div className="grid-controls w-full max-w-5xl flex flex-col md:flex-row items-center justify-between mb-8 print-hidden px-4 gap-4 z-[90] relative">
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2 relative">
@@ -575,7 +587,6 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
               </div>
             </div>
           </div>
-        </div>
       </div>
     </div>
   );
