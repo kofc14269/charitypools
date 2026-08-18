@@ -4,7 +4,7 @@ import { Square, GameSettings, Participant, PaymentTransaction, ScoreEntry, Pool
 import { solvePayoutForEntry, calculateFinancialSummary, parseCustomPayoutValue } from '../utils/finance';
 import { exportPoolCsv } from '../utils/exportCsv';
 
-const WINNINGS_PAYMENT_METHODS = ['Cash', 'Check', 'Zelle', 'Other'];
+const WINNINGS_PAYMENT_METHODS = ['Cash', 'Check', 'Zelle', 'PayPal', 'Venmo', 'Other'];
 
 interface StatsProps {
   activePool: Pool | null;

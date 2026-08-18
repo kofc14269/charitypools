@@ -1,5 +1,4 @@
-import React from 'react';
-import { act } from 'react-dom/test-utils';
+import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { fireEvent, getByPlaceholderText, getByText } from '@testing-library/dom';
 import { describe, expect, test } from 'vitest';
@@ -37,8 +36,6 @@ describe('PlayerProfile balance calculation', () => {
             participants: [participant],
             squares,
             settings: {
-                adminPassword: 'admin',
-                charityName: 'Test',
                 teamA: 'Home',
                 teamB: 'Away',
                 costPerBox: 200,

@@ -1,5 +1,4 @@
-import React from 'react';
-import { act } from 'react';
+import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { fireEvent, getByText } from '@testing-library/dom';
 import { describe, expect, test, vi } from 'vitest';
@@ -110,6 +109,9 @@ describe('Stats participant identity display', () => {
             fireEvent.change(container.querySelector('input[id="winner-payout-amount"]') as HTMLInputElement, { target: { value: '15' } });
             fireEvent.change(container.querySelector('select[id="winner-payout-method"]') as HTMLSelectElement, { target: { value: 'PayPal' } });
             fireEvent.change(container.querySelector('input[id="winner-payout-note"]') as HTMLInputElement, { target: { value: 'Partial payout' } });
+        });
+
+        await act(async () => {
             fireEvent.click(getByText(container, /add payout/i));
         });
 

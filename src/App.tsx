@@ -345,13 +345,16 @@ const App: React.FC = () => {
   }, [ownerUid, activePool]);
 
   // Global participants registry (may be migrated from per-pool participants)
-  const globalParticipants = useMemo(() => (state?.participants || []), [state?.participants]);
+  const globalParticipants = useMemo<Participant[]>(
+    () => state?.participants || [],
+    [state?.participants]
+  );
 
   // Participants relevant to the active pool (derived from global registry and pool participants/squares)
   const participantsForActivePool = useMemo(() => {
     if (!activePool) return [];
     const poolParticipants = activePool.participants || [];
-    const globalById = new Map((globalParticipants || []).map(p => [p.id, p]));
+    const globalById = new Map<string, Participant>(globalParticipants.map(p => [p.id, p]));
     const idsInPool = new Set<string>(
       poolParticipants.map(p => p.id).concat(
         (activePool.squares || []).filter(s => s.participantId).map(s => s.participantId!)

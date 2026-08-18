@@ -47,6 +47,7 @@ interface AdminPanelProps {
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = ({
+  onSignOut,
   ownerUid,
   pools,
   activePoolId,
