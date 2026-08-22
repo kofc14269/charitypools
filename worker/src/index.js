@@ -82,7 +82,10 @@ export default {
 
     const pools = Array.isArray(state?.pools) ? state.pools : Object.values(state?.pools || {});
     const pool = pools.find(candidate => candidate?.id === poolId);
-    const configuredRecipient = clean(state?.globalSettings?.reservationNotificationEmail, 254);
+    const configuredRecipient = clean(
+      state?.globalSettings?.reservationNotificationEmail || "kofcsuperbowl@gmail.com",
+      254,
+    );
     if (!pool || pool.settings?.isLocked || state?.globalSettings?.reservationNotificationsEnabled === false || !emailPattern.test(configuredRecipient)) {
       return json({ error: "Notifications are not available for this pool" }, 403, origin);
     }
