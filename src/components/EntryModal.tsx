@@ -5,7 +5,7 @@ import { Participant, GameSettings, Square, Pool, ThirteenRunData } from '../typ
 interface EntryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Omit<Participant, 'id'>, ids: number[]) => void;
+  onSubmit: (data: Omit<Participant, 'id'>, ids: number[], selectionsByPool?: Record<string, number[]>) => void;
   onUnassign: (id: number) => void;
   onSetPendingSelection: (ids: number[]) => void;
   selectedSquareIds: number[];
@@ -14,6 +14,9 @@ interface EntryModalProps {
   existingParticipants: (Participant & { originPoolName?: string })[];
   settings: GameSettings;
   isAdmin?: boolean;
+  checkoutPools?: Pool[];
+  selectionsByPool?: Record<string, number[]>;
+  onClearCheckout?: () => void;
 }
 
 const EntryModal: React.FC<EntryModalProps> = ({
@@ -27,7 +30,10 @@ const EntryModal: React.FC<EntryModalProps> = ({
   activePool,
   existingParticipants,
   settings,
-  isAdmin = false
+  isAdmin = false,
+  checkoutPools = [],
+  selectionsByPool = {},
+  onClearCheckout
 }) => {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
@@ -58,6 +64,19 @@ const EntryModal: React.FC<EntryModalProps> = ({
     if (isTeamEntry) return [];
     return (selectedSquareIds || []).map(id => (activePool.squares || [])[id]).filter(Boolean);
   }, [selectedSquareIds, activePool.squares, isTeamEntry]);
+
+  const checkoutGroups = useMemo(() => {
+    if (isTeamEntry || checkoutPools.length === 0) return [];
+    return checkoutPools.map(pool => ({
+      pool,
+      squares: (selectionsByPool[pool.id] || []).map(id => (pool.squares || [])[id]).filter(Boolean),
+    })).filter(group => group.squares.length > 0);
+  }, [checkoutPools, selectionsByPool, isTeamEntry]);
+
+  const isMultiPoolCheckout = checkoutGroups.length > 1;
+  const checkoutSelectionCount = checkoutGroups.length
+    ? checkoutGroups.reduce((sum, group) => sum + group.squares.length, 0)
+    : currentSelection.length;
 
   const selectedTeam = useMemo(() => {
     if (!isTeamEntry || !selectedTeamId) return null;
@@ -120,8 +139,13 @@ const EntryModal: React.FC<EntryModalProps> = ({
 
   const totalDue = useMemo(() => {
     if (isTeamEntry) return settings.costPerBox;
+    if (checkoutGroups.length) {
+      return checkoutGroups.reduce((total, group) => total + group.squares.reduce(
+        (poolTotal, square) => poolTotal + (group.pool.settings.costPerBox || 0) - (square.paidAmount || 0), 0
+      ), 0);
+    }
     return allSquaresInCheckout.length * settings.costPerBox - allSquaresInCheckout.reduce((acc, s) => acc + (s.paidAmount || 0), 0);
-  }, [allSquaresInCheckout, settings.costPerBox, isTeamEntry]);
+  }, [allSquaresInCheckout, settings.costPerBox, isTeamEntry, checkoutGroups]);
 
   const canRelinquish = !activePool.settings?.isLocked || isAdmin;
 
@@ -186,7 +210,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
     }
   }, [isOpen, isSubmitted, allAssigned, currentSelection, existingParticipants, isTeamEntry, selectedTeam]);
 
-  if (!isOpen || (!isTeamEntry && currentSelection.length === 0)) return null;
+  if (!isOpen || (!isTeamEntry && checkoutSelectionCount === 0)) return null;
 
   const handleRemoveSquareFromSelection = (id: number) => {
     const newSelection = (selectedSquareIds || []).filter(sid => sid !== id);
@@ -226,7 +250,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
       alias,
     };
 
-    onSubmit(normalizedData, allSquaresInCheckout.map(s => s.id));
+    onSubmit(normalizedData, allSquaresInCheckout.map(s => s.id), isMultiPoolCheckout ? selectionsByPool : undefined);
     setIsSubmitted(true);
   };
 
@@ -405,7 +429,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
         <div className="p-6 md:p-8 bg-indigo-900 text-white flex justify-between items-center relative overflow-hidden">
           <div className="relative z-10">
             <h2 className="text-xl md:text-2xl font-black uppercase tracking-tight leading-none">
-              {allAssigned ? 'Manage Entry' : (isTeamEntry ? `Claiming ${selectedTeam?.teamName}` : `Claiming ${currentSelection.length} Boxes`)}
+              {allAssigned ? 'Manage Entry' : (isTeamEntry ? `Claiming ${selectedTeam?.teamName}` : `Claiming ${checkoutSelectionCount} Boxes`)}
             </h2>
             <p className="text-indigo-300 text-[9px] font-bold uppercase tracking-widest mt-2 uppercase">{isAdmin ? 'ADMIN CONTROL ENABLED' : `Support ${settings.charityName}`}</p>
           </div>
@@ -429,7 +453,14 @@ const EntryModal: React.FC<EntryModalProps> = ({
               <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
                 <p className="text-[9px] font-black text-indigo-400 uppercase mb-1">Items in checkout</p>
                 <div className="flex flex-wrap gap-2">
-                  {allSquaresInCheckout.map(s => (
+                  {checkoutGroups.length ? checkoutGroups.map(group => (
+                    <div key={group.pool.id} className="w-full">
+                      <p className="mb-1 text-[9px] font-black uppercase text-indigo-500">{group.pool.name}</p>
+                      <div className="flex flex-wrap gap-2">{group.squares.map(s => (
+                        <span key={s.id} className="inline-flex items-center rounded-lg border border-indigo-100 bg-white px-2 py-1 text-[10px] font-black text-indigo-900 shadow-sm">#{s.id + 1}</span>
+                      ))}</div>
+                    </div>
+                  )) : allSquaresInCheckout.map(s => (
                     <div key={s.id} className="inline-flex items-center gap-1.5 px-2 py-1 bg-white text-indigo-900 font-black text-[10px] rounded-lg shadow-sm border border-indigo-100">
                       <span>#{s.id + 1}</span>
                       <button type="button" onClick={() => handleRemoveSquareFromSelection(s.id)} className="w-4 h-4 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white"><i className="fas fa-times text-[8px]"></i></button>
@@ -453,7 +484,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
               <h3 className="font-black text-indigo-900 uppercase text-sm">Successfully Claimed!</h3>
               <p className="text-4xl font-black text-indigo-900">${totalDue}</p>
               <PaymentActions currentAlias={formData.alias} amount={totalDue} />
-              <button onClick={onClose} className="text-xs font-black uppercase text-indigo-500">Return to Board</button>
+              <button onClick={() => { onClearCheckout?.(); onClose(); }} className="text-xs font-black uppercase text-indigo-500">Return to Board</button>
             </div>
           ) : (
             <div className="space-y-6">

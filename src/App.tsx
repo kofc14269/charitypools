@@ -24,6 +24,7 @@ const ThirteenRunEngine = lazy(() => import('./components/ThirteenRunEngine'));
 const PoolPortal = lazy(() => import('./components/PoolPortal'));
 import { fetchScores, GameEvent } from './services/sportsApi';
 import { resolveTargetPoolId } from './utils/poolTarget';
+import { getAvailableSquarePools, PoolSelections } from './utils/multiPoolCheckout';
 
 const createNewSquares = (): Square[] => Array.from({ length: 100 }, (_, i) => ({
   id: i,
@@ -123,7 +124,7 @@ const App: React.FC = () => {
   });
   const [selectedSquareId, setSelectedSquareId] = useState<number | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-  const [pendingSelection, setPendingSelection] = useState<number[]>([]);
+  const [pendingSelections, setPendingSelections] = useState<PoolSelections>({});
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [showAdminOption, setShowAdminOption] = useState(() => {
@@ -335,6 +336,33 @@ const App: React.FC = () => {
     return state.pools.find(p => p.id === state.activePoolId) || state.pools[0];
   }, [state?.activePoolId, state?.pools, urlPoolId, isAdminAuthenticated]);
 
+  const pendingSelection = activePool ? (pendingSelections[activePool.id] || []) : [];
+  const availableCheckoutPools = useMemo(() => getAvailableSquarePools(state?.pools || []), [state?.pools]);
+
+  const selectPoolForCheckout = useCallback((poolId: string) => {
+    const pool = state?.pools.find(item => item.id === poolId);
+    if (!pool) return;
+    setUrlPoolId(poolId);
+    setActiveTab(pool.type === 'squares' ? 'grid' : pool.type as Tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set('p', poolId);
+    if (ownerUid) url.searchParams.set('u', ownerUid);
+    window.history.replaceState({}, '', url.toString());
+  }, [state?.pools, ownerUid]);
+
+  const setActivePendingSelection = useCallback((idsOrUpdater: number[] | ((ids: number[]) => number[])) => {
+    if (!activePool) return;
+    setPendingSelections(previous => {
+      const current = previous[activePool.id] || [];
+      const next = typeof idsOrUpdater === 'function' ? idsOrUpdater(current) : idsOrUpdater;
+      return { ...previous, [activePool.id]: next };
+    });
+  }, [activePool]);
+
+  const beginCheckout = useCallback(() => {
+    setIsEntryModalOpen(true);
+  }, []);
+
   const handleCopyContestLink = useCallback(() => {
     if (!ownerUid || !activePool) return;
     const url = `${window.location.origin}${window.location.pathname}?u=${ownerUid}&p=${activePool.id}`;
@@ -480,7 +508,7 @@ const App: React.FC = () => {
     update(ref(db), updates).catch(err => console.error("Firebase atomic financial update failed:", err));
   }, [state, activePool, ownerUid]);
 
-  const handleEntrySubmit = useCallback((data: Omit<Participant, 'id'>, squareIds: number[]) => {
+  const handleEntrySubmit = useCallback((data: Omit<Participant, 'id'>, squareIds: number[], selectionsByPool?: PoolSelections) => {
     if (!state || !activePool || !ownerUid) return;
     const targetPoolId = resolveTargetPoolId(state, activePool);
     const poolIndex = state.pools.findIndex(p => p.id === targetPoolId);
@@ -492,6 +520,42 @@ const App: React.FC = () => {
 
     const newPoolParticipants = [...(activePool.participants || [])];
     const updates: any = {};
+
+    if (selectionsByPool && Object.keys(selectionsByPool).length > 1) {
+      if (!participant) {
+        participant = { ...data, id: crypto.randomUUID(), paymentHistory: [] } as Participant;
+        updates[`users/${ownerUid}/state/participants`] = [...(state.participants || []), participant];
+      }
+
+      Object.entries(selectionsByPool).forEach(([poolId, ids]) => {
+        if (!ids.length) return;
+        const selectedPoolIndex = state.pools.findIndex(pool => pool.id === poolId);
+        if (selectedPoolIndex === -1) return;
+        const selectedPool = state.pools[selectedPoolIndex];
+        const poolParticipants = [...(selectedPool.participants || [])];
+        if (!poolParticipants.some(item => item.id === participant!.id)) {
+          poolParticipants.push({ ...participant!, paymentHistory: [] });
+          updates[`users/${ownerUid}/state/pools/${selectedPoolIndex}/participants`] = poolParticipants;
+        }
+        ids.forEach(squareId => {
+          const square = (selectedPool.squares || [])[squareId];
+          if (!square || square.assigned) return;
+          updates[`users/${ownerUid}/state/pools/${selectedPoolIndex}/squares/${squareId}`] = {
+            ...square,
+            participantId: participant!.id,
+            alias: (data.alias || participant!.alias || '').toUpperCase(),
+            assigned: true,
+            paidAmount: 0,
+          };
+        });
+      });
+
+      update(ref(db), updates).then(() => {
+        setSelectedSquareId(null);
+        setSelectedTeamId(null);
+      }).catch(err => console.error(err));
+      return;
+    }
 
     if (!participant) {
       // create global participant and add to pool
@@ -533,12 +597,12 @@ const App: React.FC = () => {
     update(ref(db), updates).then(() => {
       if (participant) atomicUpdateFinancials(participant.id, newPoolParticipants);
 
-      setPendingSelection([]);
+      setActivePendingSelection([]);
       const selectedClaimId = squareIds[0] ?? null;
       setSelectedSquareId(selectedClaimId);
       setSelectedTeamId(null);
     }).catch(err => console.error(err));
-  }, [state, activePool, atomicUpdateFinancials, ownerUid, selectedTeamId]);
+  }, [state, activePool, atomicUpdateFinancials, ownerUid, selectedTeamId, setActivePendingSelection]);
 
   const handleSquareClick = useCallback((id: number) => {
     if (!activePool) return;
@@ -547,11 +611,11 @@ const App: React.FC = () => {
       setSelectedSquareId(id);
       setIsEntryModalOpen(true);
     } else if (!activePool.settings?.isLocked) {
-      setPendingSelection(prev =>
+      setActivePendingSelection(prev =>
         prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
       );
     }
-  }, [activePool]);
+  }, [activePool, setActivePendingSelection]);
 
   const handleTeamClick = useCallback((teamId: string) => {
     if (!activePool || activePool.type !== '13run') return;
@@ -777,6 +841,7 @@ const App: React.FC = () => {
 
   const handleSwitchPool = useCallback((id: string) => {
     if (!state || !ownerUid) return;
+    const selectedPool = state.pools.find(pool => pool.id === id);
     if (isAdminAuthenticated) {
       update(ref(db, `users/${ownerUid}/state`), { activePoolId: id })
         .catch(err => alert(`Switch Failed: ${err.message}`));
@@ -787,7 +852,10 @@ const App: React.FC = () => {
       window.history.pushState(null, '', newUrl);
       setUrlPoolId(id);
     }
-  }, [state, ownerUid, isAdminAuthenticated]);
+    if (selectedPool && activeTab !== 'admin') {
+      setActiveTab(selectedPool.type === 'squares' ? 'grid' : selectedPool.type as Tab);
+    }
+  }, [state, ownerUid, isAdminAuthenticated, activeTab]);
 
   const handleDeletePool = useCallback((id: string) => {
     if (!state || state.pools.length <= 1 || !ownerUid) return;
@@ -876,22 +944,17 @@ const App: React.FC = () => {
             </div>
             <div className="flex-grow min-w-0">
               <div className="flex items-center gap-3">
-                {isAdminAuthenticated ? (
-                  <select
-                    title="Active contest"
-                    value={activePool?.id || state.activePoolId}
-                    onChange={(e) => handleSwitchPool(e.target.value)}
-                    className="bg-indigo-800 text-white border-none rounded-xl px-4 py-1.5 font-black uppercase text-sm md:text-xl tracking-tighter outline-none focus:ring-2 focus:ring-indigo-400 max-w-full cursor-pointer hover:bg-indigo-700 transition-colors"
-                  >
-                    {state.pools.map(p => (
-                      <option key={p.id} value={p.id}>{(p.name || 'Untitled Pool').toUpperCase()}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <h2 className="text-white font-black uppercase text-sm md:text-xl tracking-tighter select-none py-1">
-                    {(activePool?.name || 'Charity Contest').toUpperCase()}
-                  </h2>
-                )}
+                <select
+                  title="Select pool"
+                  aria-label="Select pool"
+                  value={activePool?.id || state.activePoolId}
+                  onChange={(e) => handleSwitchPool(e.target.value)}
+                  className="bg-indigo-800 text-white border-none rounded-xl px-4 py-1.5 font-black uppercase text-sm md:text-xl tracking-tighter outline-none focus:ring-2 focus:ring-indigo-400 max-w-full cursor-pointer hover:bg-indigo-700 transition-colors"
+                >
+                  {state.pools.map(p => (
+                    <option key={p.id} value={p.id}>{(p.name || 'Untitled Pool').toUpperCase()}</option>
+                  ))}
+                </select>
 
                 {ownerUid && activePool && (
                   <button
@@ -990,7 +1053,7 @@ const App: React.FC = () => {
             <PoolPortal
               pools={state?.pools || []}
               onSelectPool={(id) => {
-                window.location.href = window.location.pathname + '?p=' + id + (ownerUid ? '&u=' + ownerUid : '');
+                selectPoolForCheckout(id);
               }}
             />
           </Suspense>
@@ -1012,14 +1075,27 @@ const App: React.FC = () => {
             </div>
           ) : activePool && (
             <div id="printable-area">
+              {availableCheckoutPools.length > 1 && (
+                <div className="print-hidden mb-5 rounded-3xl border border-indigo-100 bg-white p-4 shadow-sm">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-indigo-900">Select any number of boxes from one or more pools</p>
+                  <div className="flex flex-wrap gap-2">
+                    {availableCheckoutPools.map(pool => {
+                      const count = (pendingSelections[pool.id] || []).length;
+                      return <button key={pool.id} type="button" onClick={() => selectPoolForCheckout(pool.id)} className={`rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-wider ${pool.id === activePool.id ? 'bg-indigo-900 text-white' : count ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                        {count ? '\u2713 ' : ''}{pool.name}{count ? ` (${count})` : ''}
+                      </button>;
+                    })}
+                  </div>
+                </div>
+              )}
               <Grid
                 squares={activePool?.squares || []}
                 pendingSelection={pendingSelection}
                 settings={{ ...state.globalSettings, ...(activePool?.settings || DEFAULT_POOL_SETTINGS) }}
                 onSquareClick={handleSquareClick}
                 participants={participantsForActivePool}
-                onCheckout={() => setIsEntryModalOpen(true)}
-                onSetPendingSelection={setPendingSelection}
+                onCheckout={beginCheckout}
+                onSetPendingSelection={setActivePendingSelection}
                 activePool={activePool}
               />
             </div>
@@ -1267,13 +1343,16 @@ const App: React.FC = () => {
             onClose={() => { setIsEntryModalOpen(false); setSelectedSquareId(null); setSelectedTeamId(null); }}
             onSubmit={handleEntrySubmit}
             onUnassign={handleUnassignSquare}
-            onSetPendingSelection={setPendingSelection}
+            onSetPendingSelection={setActivePendingSelection}
             selectedSquareIds={selectedSquareId !== null ? [selectedSquareId] : pendingSelection}
             selectedTeamId={selectedTeamId}
             activePool={activePool}
             existingParticipants={globalParticipantsWithOrigin}
             settings={{ ...state.globalSettings, ...(activePool?.settings || DEFAULT_POOL_SETTINGS) }}
             isAdmin={isAdminAuthenticated}
+            checkoutPools={availableCheckoutPools}
+            selectionsByPool={pendingSelections}
+            onClearCheckout={() => setPendingSelections({})}
           />
         </Suspense>
       )}
