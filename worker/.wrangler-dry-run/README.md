@@ -1,1 +1,0 @@
-This folder contains the built output assets for the worker "charitypools-reservation-notifications" generated at 2026-08-22T15:22:03.005Z.

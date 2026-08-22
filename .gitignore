@@ -6,6 +6,7 @@ reports/
 .env.*
 worker/.dev.vars
 .wrangler/
+worker/.wrangler-dry-run/
 .npm-cache/
 scratch/
 tsc_output*.txt
