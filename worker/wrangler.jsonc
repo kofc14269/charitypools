@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "charitypools-reservation-notifications",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-22",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "kv_namespaces": [
+    {
+      "binding": "NOTIFICATION_DEDUP",
+      "id": "88cb6370029b4641acf112f2bd479caf"
+    }
+  ],
+  "vars": {
+    "FIREBASE_PROJECT_ID": "st-bernard-kofc-superbowl-grid",
+    "ALLOWED_ORIGINS": "https://charitypools.kofc14269.com,https://kofc14269.github.io,http://localhost:3000,http://localhost:5173",
+    "FROM_EMAIL": "Charity Pools <notifications@kofc14269.com>"
+  }
+}

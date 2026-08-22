@@ -1,27 +1,43 @@
 {
   "rules": {
+    ".read": false,
+    ".write": false,
     "users": {
       "$uid": {
-        ".read": true,
         "state": {
+          ".read": true,
+          ".write": "auth != null && ((auth.uid === $uid && auth.token.firebase.sign_in_provider !== 'anonymous') || (auth.token.email != null && auth.token.email === 'kofc14269@gmail.com'))",
+          "guestParticipants": {
+            "$guestUid": {
+              ".write": "auth != null && auth.uid === $guestUid && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('users').child($uid).child('state').child('globalSettings').exists()",
+              ".validate": "(auth.uid === $uid && auth.token.firebase.sign_in_provider !== 'anonymous') || (auth.token.email != null && auth.token.email === 'kofc14269@gmail.com') || (newData.hasChildren(['id', 'name', 'email', 'phone', 'alias']) && newData.child('id').val() === auth.uid && newData.child('name').isString() && newData.child('name').val().length <= 200 && newData.child('email').isString() && newData.child('email').val().length <= 254 && newData.child('phone').isString() && newData.child('phone').val().length <= 40 && newData.child('alias').isString() && newData.child('alias').val().length > 0 && newData.child('alias').val().length <= 80 && !newData.child('paymentHistory').exists() && !newData.child('winningsPayoutHistory').exists())"
+            }
+          },
           "pools": {
-            ".write": true
-          },
-          "participants": {
-            ".write": true
-          },
-          "globalSettings": {
-            ".write": "$uid === auth.uid || (auth.token != null && auth.token.email === 'kofc14269@gmail.com')"
-          },
-          "activePoolId": {
-            ".write": "$uid === auth.uid || (auth.token != null && auth.token.email === 'kofc14269@gmail.com')"
+            "$poolIndex": {
+              "squares": {
+                "$squareIndex": {
+                  ".write": "auth != null && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('users').child($uid).child('state').child('pools').child($poolIndex).child('settings').child('isLocked').val() === false && data.exists() && data.child('assigned').val() === false && newData.child('assigned').val() === true && newData.child('participantId').val() === auth.uid",
+                  ".validate": "(auth.uid === $uid && auth.token.firebase.sign_in_provider !== 'anonymous') || (auth.token.email != null && auth.token.email === 'kofc14269@gmail.com') || (newData.hasChildren(['id', 'row', 'col', 'participantId', 'alias', 'paidAmount', 'assigned']) && newData.child('id').val() === data.child('id').val() && newData.child('row').val() === data.child('row').val() && newData.child('col').val() === data.child('col').val() && newData.child('participantId').val() === auth.uid && newData.child('alias').isString() && newData.child('alias').val().length > 0 && newData.child('alias').val().length <= 80 && newData.child('paidAmount').val() === 0 && newData.child('assigned').val() === true && !newData.child('paymentMethod').exists())"
+                }
+              },
+              "gameData": {
+                "entries": {
+                  "$teamId": {
+                    "participantId": {
+                      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('users').child($uid).child('state').child('pools').child($poolIndex).child('settings').child('isLocked').val() === false && !data.exists() && newData.val() === auth.uid"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
     },
     "state": {
       ".read": true,
-      ".write": "auth.token != null && auth.token.email === 'kofc14269@gmail.com'"
+      ".write": "auth != null && auth.token.email === 'kofc14269@gmail.com'"
     }
   }
 }

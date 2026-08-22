@@ -47,7 +47,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                   <li className="flex gap-2"><i className="fas fa-th text-indigo-400 mt-0.5"></i> <span><strong>Board:</strong> View and claim squares</span></li>
                   <li className="flex gap-2"><i className="fas fa-trophy text-indigo-400 mt-0.5"></i> <span><strong>Winners:</strong> Live score tracking and payouts</span></li>
                   <li className="flex gap-2"><i className="fas fa-user-check text-indigo-400 mt-0.5"></i> <span><strong>My Boxes:</strong> Check your status and balance</span></li>
-                  <li className="flex gap-2"><i className="fas fa-lock text-indigo-400 mt-0.5"></i> <span><strong>Admin:</strong> Management tools (password protected)</span></li>
+                  <li className="flex gap-2"><i className="fas fa-lock text-indigo-400 mt-0.5"></i> <span><strong>Admin:</strong> Management tools for signed-in owners and administrators</span></li>
                 </ul>
               </div>
             </div>
@@ -65,19 +65,19 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               <div className="p-5 bg-gray-50 rounded-2xl border border-gray-100">
                 <p className="text-[10px] font-black text-indigo-900 uppercase mb-2">Claiming Squares</p>
                 <p className="text-xs text-gray-500 font-medium leading-relaxed">
-                  Click any white square on the board to select it (they'll highlight in blue). Select as many as you want, then press <span className="text-indigo-600 font-bold">Claim Selected</span> to register with your name, email, and alias.
+                  Click any white square on the board to select it (it will highlight in blue). Select as many as you want, then press <span className="text-indigo-600 font-bold">Claim Selected</span>. Enter your name, alias, and either an email address or phone number to complete the reservation. If you only have viewing access, contact the contest organizer to save the reservation for you.
                 </p>
               </div>
               <div className="p-5 bg-gray-50 rounded-2xl border border-gray-100">
                 <p className="text-[10px] font-black text-indigo-900 uppercase mb-2">Making Payments</p>
                 <p className="text-xs text-gray-500 font-medium leading-relaxed">
-                  After registering, use the payment buttons in <span className="text-indigo-600 font-bold">My Boxes</span> to send funds via Venmo, PayPal, or Zelle. Always include your <span className="text-indigo-600 font-bold">Alias</span> in the memo.
+                  After reserving, choose an available payment option in the confirmation screen or under <span className="text-indigo-600 font-bold">My Boxes</span>. Always include your <span className="text-indigo-600 font-bold">Alias</span> in the payment memo.
                 </p>
               </div>
               <div className="p-5 bg-gray-50 rounded-2xl border border-gray-100">
                 <p className="text-[10px] font-black text-indigo-900 uppercase mb-2">Checking Your Status</p>
                 <p className="text-xs text-gray-500 font-medium leading-relaxed">
-                  Go to <span className="text-indigo-600 font-bold">My Boxes</span>, enter your email, and see your claimed squares, payment history, and current balance at a glance.
+                  Go to <span className="text-indigo-600 font-bold">My Boxes</span>, enter your email address or phone number, and see your claimed squares, payment history, and current balance at a glance.
                 </p>
               </div>
               <div className="p-5 bg-gray-50 rounded-2xl border border-gray-100">
@@ -89,7 +89,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               <div className="p-5 bg-gray-50 rounded-2xl border border-gray-100">
                 <p className="text-[10px] font-black text-indigo-900 uppercase mb-2">Sharing the Contest</p>
                 <p className="text-xs text-gray-500 font-medium leading-relaxed">
-                  Click the <span className="text-indigo-600 font-bold">Copy Link</span> button in the header to get a unique shareable link for this contest. Recipients can see the board and join without needing special access.
+                  Click the <span className="text-indigo-600 font-bold">Copy Link</span> button in the header to get a unique shareable link for this contest. Recipients can use the link to view the selected board. Saving reservations requires authorized access under the current security settings.
                 </p>
               </div>
               <div className="p-5 bg-gray-50 rounded-2xl border border-gray-100">
@@ -127,6 +127,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                 <ul className="text-xs text-gray-600 space-y-2 mt-2">
                   <li className="flex gap-2"><i className="fas fa-check text-indigo-400 mt-1"></i> <span><strong>Standard:</strong> Split payouts across Q1, Halftime, Q3, and Final.</span></li>
                   <li className="flex gap-2"><i className="fas fa-check text-indigo-400 mt-1"></i> <span><strong>Score Change:</strong> Award a multiplier payout each time the score changes.</span></li>
+                  <li className="flex gap-2"><i className="fas fa-check text-indigo-400 mt-1"></i> <span><strong>Single Winner:</strong> Award the entire player pot to one winning square.</span></li>
                 </ul>
               </div>
               <div className="p-5 border-l-4 border-indigo-600 bg-indigo-50/50 rounded-r-2xl">
@@ -139,6 +140,13 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                 <p className="text-[10px] font-black text-indigo-900 uppercase mb-1">Participant & Payment Management</p>
                 <p className="text-xs text-gray-600 font-medium">
                   Manage all participants, edit aliases, log manual payments, and redistribute funds. Unassign squares to reclaim them, and use <span className="font-bold">Clear All Boxes</span> for bulk resets.
+                </p>
+              </div>
+              <div className="p-5 border-l-4 border-indigo-600 bg-indigo-50/50 rounded-r-2xl">
+                <p className="text-[10px] font-black text-indigo-900 uppercase mb-1">Reservation Email Notifications</p>
+                <p className="text-xs text-gray-600 font-medium">
+                  Open <span className="font-bold">Admin Panel → Organization &amp; Style</span> to turn reservation emails on or off and change the recipient address. When enabled, one message is sent for each completed reservation, even when several boxes are reserved together.
+                  Shared-link visitors do not need an account; Firebase gives each visitor a temporary secure identity used only to save their profile and claim available boxes.
                 </p>
               </div>
               <div className="p-5 border-l-4 border-indigo-600 bg-indigo-50/50 rounded-r-2xl">

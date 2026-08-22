@@ -1,5 +1,5 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { GlobalSettings } from '../../types';
 
 interface AdminGlobalSettingsProps {
@@ -19,6 +19,13 @@ const AdminGlobalSettings: React.FC<AdminGlobalSettingsProps> = ({
   const fileInputBRef = useRef<HTMLInputElement>(null);
   const [teamALogoInput, setTeamALogoInput] = useState(globalSettings?.teamALogo || '');
   const [teamBLogoInput, setTeamBLogoInput] = useState(globalSettings?.teamBLogo || '');
+  const [notificationEmailInput, setNotificationEmailInput] = useState(
+    globalSettings?.reservationNotificationEmail || 'kofcsuperbowl@gmail.com'
+  );
+
+  useEffect(() => {
+    setNotificationEmailInput(globalSettings?.reservationNotificationEmail || 'kofcsuperbowl@gmail.com');
+  }, [globalSettings?.reservationNotificationEmail]);
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -29,6 +36,52 @@ const AdminGlobalSettings: React.FC<AdminGlobalSettingsProps> = ({
         <div>
           <h3 className="text-2xl font-black text-indigo-950 uppercase tracking-tighter leading-none">Organization Branding</h3>
           <p className="text-indigo-300 font-bold uppercase text-[9px] tracking-widest mt-2">Manage your charity's global identity</p>
+        </div>
+      </div>
+
+      <div className="space-y-6 border-t border-indigo-50 pt-8">
+        <div className="flex items-center justify-between gap-6">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-indigo-900 rounded-2xl flex items-center justify-center text-white text-xl">
+              <i className="fas fa-envelope"></i>
+            </div>
+            <div>
+              <h3 className="text-2xl font-black text-indigo-950 uppercase tracking-tighter leading-none">Reservation Notifications</h3>
+              <p className="text-indigo-300 font-bold uppercase text-[9px] tracking-widest mt-2">Email an administrator when boxes are reserved</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={globalSettings?.reservationNotificationsEnabled !== false}
+            onClick={() => onUpdateGlobalSettings({
+              reservationNotificationsEnabled: globalSettings?.reservationNotificationsEnabled === false,
+            })}
+            className={`relative w-14 h-8 rounded-full transition-colors ${globalSettings?.reservationNotificationsEnabled !== false ? 'bg-emerald-500' : 'bg-gray-300'}`}
+            title="Toggle reservation email notifications"
+          >
+            <span className={`absolute left-1 top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${globalSettings?.reservationNotificationsEnabled !== false ? 'translate-x-6' : 'translate-x-0'}`} />
+          </button>
+        </div>
+
+        <div className="space-y-3 max-w-xl">
+          <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block">Notification Email Address</label>
+          <input
+            title="Reservation notification email"
+            type="email"
+            required
+            value={notificationEmailInput}
+            disabled={globalSettings?.reservationNotificationsEnabled === false}
+            onChange={e => setNotificationEmailInput(e.target.value)}
+            onBlur={e => {
+              if (e.currentTarget.checkValidity()) {
+                onUpdateGlobalSettings({ reservationNotificationEmail: notificationEmailInput.trim() });
+              }
+            }}
+            placeholder="notifications@example.com"
+            className="w-full p-5 bg-indigo-50/50 border-2 border-transparent invalid:border-red-300 focus:border-indigo-400 rounded-2xl font-bold text-indigo-950 outline-none transition-all disabled:opacity-50"
+          />
+          <p className="text-[9px] text-gray-400 italic leading-relaxed">Changes save when you leave this field. The Gmail sending account is not changed.</p>
         </div>
       </div>
 

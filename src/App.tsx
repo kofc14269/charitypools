@@ -6,6 +6,7 @@ import { db, auth, googleProvider } from './firebase';
 import { ref, onValue, set, update, get } from "firebase/database";
 import {
   onAuthStateChanged,
+  signInAnonymously,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
@@ -60,6 +61,8 @@ const DEFAULT_POOL_SETTINGS: PoolSettings = {
 const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   adminPassword: 'admin',
   charityName: 'Kofc Charity Pools',
+  reservationNotificationsEnabled: true,
+  reservationNotificationEmail: 'kofcsuperbowl@gmail.com',
   zelleAccount: '',
   paypalAccount: '',
   venmoAccount: '',
@@ -67,6 +70,35 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
 };
 
 const ADMIN_AUTH_SESSION_KEY = 'charitypools-admin-authenticated';
+const DEFAULT_RESERVATION_NOTIFICATION_URL = 'https://charitypools-reservation-notifications.charitypools-notifications-worker.workers.dev';
+
+interface ReservationNotification {
+  ownerUid: string;
+  poolId: string;
+  poolName: string;
+  notificationEmail: string;
+  participant: Pick<Participant, 'id' | 'name' | 'alias' | 'email' | 'phone'>;
+  boxes: Array<Pick<Square, 'id' | 'row' | 'col'>>;
+  reservedAt: number;
+}
+
+const sendReservationNotification = async (notification: ReservationNotification) => {
+  const endpoint = import.meta.env.VITE_RESERVATION_NOTIFICATION_URL?.trim() || DEFAULT_RESERVATION_NOTIFICATION_URL;
+  const currentUser = auth.currentUser;
+  if (!endpoint || !currentUser) return;
+
+  const idToken = await currentUser.getIdToken();
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(notification),
+  });
+
+  if (!response.ok) throw new Error(`Notification request failed (${response.status})`);
+};
 
 import { MLB_TEAMS, NFL_TEAMS } from './constants/sports';
 
@@ -137,6 +169,7 @@ const App: React.FC = () => {
 
   // Auth & Multi-tenant state
   const [authUser, setAuthUser] = useState<User | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -179,12 +212,24 @@ const App: React.FC = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setAuthUser(user);
+      setIsAuthReady(true);
       if (user && window.sessionStorage.getItem(ADMIN_AUTH_SESSION_KEY) === 'true') {
         setIsAdminAuthenticated(true);
       }
     });
     return () => unsubscribe();
   }, []);
+
+  // Shared contest links use Firebase anonymous auth so public visitors can
+  // claim only the reservation paths allowed by the database rules.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!isAuthReady || authUser || !params.get('u')) return;
+    signInAnonymously(auth).catch(err => {
+      console.error('Anonymous reservation sign-in failed:', err);
+      setAuthError('Reservations are temporarily unavailable. Please refresh and try again.');
+    });
+  }, [authUser, isAuthReady]);
 
   // Pool ID pinned from ?p= URL param (for per-contest public links)
   const [urlPoolId, setUrlPoolId] = useState<string | null>(null);
@@ -373,15 +418,18 @@ const App: React.FC = () => {
   }, [ownerUid, activePool]);
 
   // Global participants registry (may be migrated from per-pool participants)
-  const globalParticipants = useMemo<Participant[]>(
-    () => state?.participants || [],
-    [state?.participants]
-  );
+  const globalParticipants = useMemo<Participant[]>(() => {
+    const registered = state?.participants || [];
+    const guests = Object.values(state?.guestParticipants || {});
+    const registeredIds = new Set(registered.map(participant => participant.id));
+    return [...registered, ...guests.filter(participant => !registeredIds.has(participant.id))];
+  }, [state?.participants, state?.guestParticipants]);
 
   // Participants relevant to the active pool (derived from global registry and pool participants/squares)
   const participantsForActivePool = useMemo(() => {
     if (!activePool) return [];
     const poolParticipants = activePool.participants || [];
+    const guestParticipants = Object.values(state?.guestParticipants || {});
     const globalById = new Map<string, Participant>(globalParticipants.map(p => [p.id, p]));
     const idsInPool = new Set<string>(
       poolParticipants.map(p => p.id).concat(
@@ -392,7 +440,12 @@ const App: React.FC = () => {
     // For each participant in this pool, use the pool-level record as the source of truth
     // for paymentHistory (pool-scoped), but fill in name/email/phone/alias from the
     // global record in case the pool record is stale or missing those fields.
-    return poolParticipants
+    const relevantParticipants = [
+      ...poolParticipants,
+      ...guestParticipants.filter(participant => idsInPool.has(participant.id) && !poolParticipants.some(existing => existing.id === participant.id)),
+    ];
+
+    return relevantParticipants
       .filter(p => idsInPool.has(p.id))
       .map(poolP => {
         const globalP = globalById.get(poolP.id);
@@ -406,7 +459,7 @@ const App: React.FC = () => {
           alias: poolP.alias || globalP.alias,
         };
       });
-  }, [activePool, globalParticipants]);
+  }, [activePool, globalParticipants, state?.guestParticipants]);
 
 
   // Participants with an origin pool name (used by EntryModal quick-select)
@@ -516,16 +569,36 @@ const App: React.FC = () => {
 
     // Use Alias as the sole unique identifier for an entry
     const normalize = (s: string) => (s || '').toLowerCase();
-    let participant = (state.participants || []).find(p => normalize(p.alias) === normalize(data.alias) && data.alias);
+    const currentUser = auth.currentUser;
+    if (new URLSearchParams(window.location.search).get('u') && !currentUser) {
+      alert('Secure reservation access is still loading. Please wait a moment and try again.');
+      return;
+    }
+    const isAnonymousReservation = currentUser?.isAnonymous === true;
+    let participant = isAnonymousReservation
+      ? state.guestParticipants?.[currentUser!.uid]
+      : (state.participants || []).find(p => normalize(p.alias) === normalize(data.alias) && data.alias);
 
     const newPoolParticipants = [...(activePool.participants || [])];
     const updates: any = {};
+    let reservationNotification: ReservationNotification | null = null;
+
+    if (isAnonymousReservation) {
+      participant = {
+        id: currentUser!.uid,
+        name: data.name || '',
+        email: data.email || '',
+        phone: data.phone || '',
+        alias: data.alias || '',
+      };
+      updates[`users/${ownerUid}/state/guestParticipants/${currentUser!.uid}`] = participant;
+    } else if (!participant) {
+      participant = { ...data, id: crypto.randomUUID(), paymentHistory: [] } as Participant;
+      updates[`users/${ownerUid}/state/participants`] = [...(state.participants || []).filter(pp => pp.id !== participant!.id), participant];
+    }
 
     if (selectionsByPool && Object.keys(selectionsByPool).length > 1) {
-      if (!participant) {
-        participant = { ...data, id: crypto.randomUUID(), paymentHistory: [] } as Participant;
-        updates[`users/${ownerUid}/state/participants`] = [...(state.participants || []), participant];
-      }
+      const multiPoolNotifications: ReservationNotification[] = [];
 
       Object.entries(selectionsByPool).forEach(([poolId, ids]) => {
         if (!ids.length) return;
@@ -533,13 +606,16 @@ const App: React.FC = () => {
         if (selectedPoolIndex === -1) return;
         const selectedPool = state.pools[selectedPoolIndex];
         const poolParticipants = [...(selectedPool.participants || [])];
-        if (!poolParticipants.some(item => item.id === participant!.id)) {
+        if (!isAnonymousReservation && !poolParticipants.some(item => item.id === participant!.id)) {
           poolParticipants.push({ ...participant!, paymentHistory: [] });
           updates[`users/${ownerUid}/state/pools/${selectedPoolIndex}/participants`] = poolParticipants;
         }
-        ids.forEach(squareId => {
+        const availableIds = ids.filter(squareId => {
           const square = (selectedPool.squares || [])[squareId];
-          if (!square || square.assigned) return;
+          return Boolean(square && !square.assigned);
+        });
+        availableIds.forEach(squareId => {
+          const square = (selectedPool.squares || [])[squareId]!;
           updates[`users/${ownerUid}/state/pools/${selectedPoolIndex}/squares/${squareId}`] = {
             ...square,
             participantId: participant!.id,
@@ -548,39 +624,53 @@ const App: React.FC = () => {
             paidAmount: 0,
           };
         });
+
+        if (availableIds.length > 0 && state.globalSettings.reservationNotificationsEnabled !== false) {
+          multiPoolNotifications.push({
+            ownerUid,
+            poolId: selectedPool.id,
+            poolName: selectedPool.name,
+            notificationEmail: state.globalSettings.reservationNotificationEmail || 'kofcsuperbowl@gmail.com',
+            participant: {
+              id: participant!.id,
+              name: data.name || participant!.name || '',
+              alias: data.alias || participant!.alias || '',
+              email: data.email || participant!.email || '',
+              phone: data.phone || participant!.phone || '',
+            },
+            boxes: availableIds.map(squareId => {
+              const square = (selectedPool.squares || [])[squareId];
+              return {
+                id: square?.id ?? squareId,
+                row: square?.row ?? Math.floor(squareId / 10),
+                col: square?.col ?? squareId % 10,
+              };
+            }),
+            reservedAt: Date.now(),
+          });
+        }
       });
 
       update(ref(db), updates).then(() => {
+        multiPoolNotifications.forEach(notification => {
+          void sendReservationNotification(notification)
+            .catch(err => console.error('Reservation email notification failed:', err));
+        });
         setSelectedSquareId(null);
         setSelectedTeamId(null);
       }).catch(err => console.error(err));
       return;
     }
 
-    if (!participant) {
-      // create global participant and add to pool
-      participant = { ...data, id: crypto.randomUUID(), paymentHistory: [] } as Participant;
-      updates[`users/${ownerUid}/state/participants`] = [...(state.participants || []).filter(pp => pp.id !== participant!.id), participant];
-      newPoolParticipants.push(participant);
+    if (!isAnonymousReservation && !newPoolParticipants.find(p => p.id === participant!.id)) {
+      newPoolParticipants.push({ ...participant!, paymentHistory: participant!.paymentHistory || [] });
       updates[`users/${ownerUid}/state/pools/${poolIndex}/participants`] = newPoolParticipants;
-    } else {
-      // ensure pool references this participant (back-compat)
-      if (!newPoolParticipants.find(p => p.id === participant!.id)) {
-        // Always start with empty paymentHistory in a new pool — payments are pool-scoped
-        newPoolParticipants.push({ ...participant!, paymentHistory: [] });
-        updates[`users/${ownerUid}/state/pools/${poolIndex}/participants`] = newPoolParticipants;
-      }
     }
 
     if (activePool.type === '13run' && selectedTeamId) {
       const gameData = activePool.gameData as ThirteenRunData;
-      const newEntries = { ...(gameData?.entries || {}) };
-      if (newEntries[selectedTeamId]) {
-        newEntries[selectedTeamId] = {
-          ...newEntries[selectedTeamId],
-          participantId: participant!.id
-        };
-        updates[`users/${ownerUid}/state/pools/${poolIndex}/gameData/entries`] = newEntries;
+      if (gameData?.entries?.[selectedTeamId]) {
+        updates[`users/${ownerUid}/state/pools/${poolIndex}/gameData/entries/${selectedTeamId}/participantId`] = participant!.id;
       }
     } else {
       squareIds.forEach(sid => {
@@ -592,10 +682,41 @@ const App: React.FC = () => {
           paidAmount: 0, // always reset — financials are set by atomicUpdateFinancials after
         };
       });
+
+      if (squareIds.length > 0 && state.globalSettings.reservationNotificationsEnabled !== false) {
+        reservationNotification = {
+          ownerUid,
+          poolId: activePool.id,
+          poolName: activePool.name,
+          notificationEmail: state.globalSettings.reservationNotificationEmail || 'kofcsuperbowl@gmail.com',
+          participant: {
+            id: participant!.id,
+            name: data.name || participant!.name || '',
+            alias: data.alias || participant!.alias || '',
+            email: data.email || participant!.email || '',
+            phone: data.phone || participant!.phone || '',
+          },
+          boxes: squareIds.map(sid => {
+            const square = activePool.squares?.[sid];
+            return {
+              id: square?.id ?? sid,
+              row: square?.row ?? Math.floor(sid / 10),
+              col: square?.col ?? sid % 10,
+            };
+          }),
+          reservedAt: Date.now(),
+        };
+      }
     }
 
     update(ref(db), updates).then(() => {
-      if (participant) atomicUpdateFinancials(participant.id, newPoolParticipants);
+      const currentUser = auth.currentUser;
+      const canManageFinancials = currentUser?.uid === ownerUid || currentUser?.email === 'kofc14269@gmail.com';
+      if (participant && canManageFinancials) atomicUpdateFinancials(participant.id, newPoolParticipants);
+      if (reservationNotification) {
+        void sendReservationNotification(reservationNotification)
+          .catch(err => console.error('Reservation email notification failed:', err));
+      }
 
       setActivePendingSelection([]);
       const selectedClaimId = squareIds[0] ?? null;

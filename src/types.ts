@@ -63,6 +63,8 @@ export interface PayoutSettings {
 export interface GlobalSettings {
   adminPassword?: string;
   charityName: string;
+  reservationNotificationsEnabled?: boolean;
+  reservationNotificationEmail?: string;
   zelleAccount?: string;
   paypalAccount?: string;
   paypalLink?: string;
@@ -147,6 +149,7 @@ export interface Pool {
 export interface AppState {
   pools: Pool[];
   participants?: Participant[]; // global participant registry
+  guestParticipants?: Record<string, Participant>; // anonymous visitors, keyed by their Firebase UID
   activePoolId: string;
   globalSettings: GlobalSettings;
 }

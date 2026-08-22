@@ -89,6 +89,24 @@ Navigate to your hosted URL, then click the **lock icon** in the footer to revea
 - Admin password is never stored in the build bundle
 - All API keys and secrets are kept in `.env.local` (gitignored) or in Firebase
 
+### Box reservation email notifications
+
+Each successful squares reservation sends one email to the recipient configured under Admin → Global Settings. Notifications can also be switched off there. Shared-link visitors are signed in anonymously by Firebase; security rules let them update only their own guest profile and claim an unlocked, unassigned box with that same identity. Email is handled by an authenticated Cloudflare Worker and Resend, so Firebase can remain on the Spark plan and the email API key is never exposed in the web app.
+
+Configure the Resend API key as a Cloudflare Worker secret:
+
+```bash
+cd worker
+npx wrangler secret put RESEND_API_KEY
+```
+
+Deploy the Worker, then build the site with its URL:
+
+```bash
+npx wrangler deploy
+VITE_RESERVATION_NOTIFICATION_URL=https://charitypools-reservation-notifications.<account>.workers.dev npm run build
+```
+
 ---
 
 ## License

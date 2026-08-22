@@ -4,5 +4,8 @@ reports/
 .env
 .env.local
 .env.*
+worker/.dev.vars
+.wrangler/
+.npm-cache/
 scratch/
 tsc_output*.txt
