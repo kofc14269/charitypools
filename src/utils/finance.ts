@@ -1,4 +1,54 @@
-import { ScoreEntry, GameSettings, Square, ThirteenRunData } from '../types';
+import { ScoreEntry, GameSettings, Square, ThirteenRunData, Pool } from '../types';
+
+export interface ParticipantContestBalance {
+  poolId: string;
+  poolName: string;
+  poolType: Pool['type'];
+  entryCount: number;
+  totalDue: number;
+  totalPaid: number;
+  outstanding: number;
+}
+
+/** Entry-fee balances for one participant across every contest owned by an admin. */
+export const calculateParticipantContestBalances = (
+  pools: Pool[],
+  participantId: string
+): ParticipantContestBalance[] => {
+  return (pools || []).flatMap(pool => {
+    const participant = (pool.participants || []).find(p => String(p.id) === String(participantId));
+    let entryCount = 0;
+
+    if (pool.type === '13run') {
+      entryCount = Object.values((pool.gameData as ThirteenRunData)?.entries || {})
+        .filter(entry => String(entry.participantId || '') === String(participantId)).length;
+    } else if (pool.type === 'survivor' || pool.type === 'pickem') {
+      entryCount = participant ? 1 : 0;
+    } else {
+      entryCount = (pool.squares || [])
+        .filter(square => square.assigned && String(square.participantId || '') === String(participantId)).length;
+    }
+
+    if (!participant && entryCount === 0) return [];
+
+    const totalDue = entryCount * (pool.settings?.costPerBox || 0);
+    const totalPaid = pool.type === 'squares'
+      ? (pool.squares || [])
+          .filter(square => String(square.participantId || '') === String(participantId))
+          .reduce((sum, square) => sum + (square.paidAmount || 0), 0)
+      : (participant?.paymentHistory || []).reduce((sum, payment) => sum + payment.amount, 0);
+
+    return [{
+      poolId: pool.id,
+      poolName: pool.name || pool.id,
+      poolType: pool.type,
+      entryCount,
+      totalDue,
+      totalPaid,
+      outstanding: Math.max(0, totalDue - totalPaid),
+    }];
+  });
+};
 
 export const formatMoney = (value: number) => `$${value.toFixed(2)}`;
 

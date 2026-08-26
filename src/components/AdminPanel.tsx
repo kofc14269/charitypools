@@ -467,7 +467,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {activeSection === 'stats' && (
               <Stats
-                activePool={activePool} squares={squares} participants={participants} scores={scores}
+                activePool={activePool} pools={pools} squares={squares} participants={participants} scores={scores}
                 settings={{ ...globalSettings, ...poolSettings }} poolName={activePool?.name}
                 onUpdateSquare={onUpdateSquare} onUpdateParticipant={onUpdateParticipant} onUpdateScore={onUpdateScore}
                 onUnassignSquare={onUnassignSquare} onClearUserBoxes={onClearUserBoxes}

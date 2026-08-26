@@ -1,13 +1,14 @@
 
 import React, { useMemo, useState } from 'react';
 import { Square, GameSettings, Participant, PaymentTransaction, ScoreEntry, Pool, ThirteenRunData } from '../types';
-import { solvePayoutForEntry, calculateFinancialSummary, parseCustomPayoutValue } from '../utils/finance';
+import { solvePayoutForEntry, calculateFinancialSummary, calculateParticipantContestBalances, parseCustomPayoutValue } from '../utils/finance';
 import { exportPoolCsv } from '../utils/exportCsv';
 
 const WINNINGS_PAYMENT_METHODS = ['Cash', 'Check', 'Zelle', 'PayPal', 'Venmo', 'Other'];
 
 interface StatsProps {
   activePool: Pool | null;
+  pools?: Pool[];
   squares: Square[];
   participants: Participant[];
   settings: GameSettings;
@@ -25,6 +26,7 @@ interface StatsProps {
 
 const Stats: React.FC<StatsProps> = ({
   activePool,
+  pools = [],
   squares,
   participants,
   settings,
@@ -203,6 +205,17 @@ const Stats: React.FC<StatsProps> = ({
   const selectedParticipantStats = editModalParticipant
     ? roster.find(participant => participant.id === editModalParticipant.id)
     : null;
+
+  const selectedParticipantContestBalances = useMemo(() => {
+    if (!editModalParticipant) return [];
+    const adminPools = pools.length > 0 ? pools : (activePool ? [activePool] : []);
+    return calculateParticipantContestBalances(adminPools, editModalParticipant.id);
+  }, [editModalParticipant, pools, activePool]);
+
+  const selectedParticipantAllContestsOwed = useMemo(
+    () => selectedParticipantContestBalances.reduce((sum, contest) => sum + contest.outstanding, 0),
+    [selectedParticipantContestBalances]
+  );
 
   const openAddPaymentModal = (p: any) => {
     const balance = Math.max(0, p.netOwed || 0);
@@ -459,6 +472,37 @@ const Stats: React.FC<StatsProps> = ({
                   <p className="text-xl font-black text-amber-700">${(selectedParticipantStats?.netOwed || 0).toFixed(2)}</p>
                 </div>
               </div>
+
+              <section className="rounded-2xl border-2 border-indigo-100 overflow-hidden" aria-label="All contest balances">
+                <div className="bg-indigo-50 px-4 py-3 flex items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-sm font-black uppercase text-indigo-950">All Contest Balances</h4>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400">Every contest for this admin</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[9px] font-black uppercase text-red-500">Total Owed</p>
+                    <p className="text-2xl font-black text-red-600">${selectedParticipantAllContestsOwed.toFixed(2)}</p>
+                  </div>
+                </div>
+                {selectedParticipantContestBalances.length === 0 ? (
+                  <div className="p-5 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">No contest balances found.</div>
+                ) : (
+                  <div className="divide-y divide-indigo-50">
+                    {selectedParticipantContestBalances.map(contest => (
+                      <div key={contest.poolId} className="grid grid-cols-2 md:grid-cols-5 gap-3 px-4 py-3 items-center">
+                        <div className="col-span-2 md:col-span-1 min-w-0">
+                          <p className="font-black text-xs text-indigo-950 truncate">{contest.poolName}</p>
+                          <p className="text-[8px] font-black uppercase text-indigo-400">{contest.poolType}</p>
+                        </div>
+                        <div><p className="text-[8px] font-black uppercase text-gray-400">Entries</p><p className="font-black text-sm">{contest.entryCount}</p></div>
+                        <div><p className="text-[8px] font-black uppercase text-gray-400">Due</p><p className="font-black text-sm">${contest.totalDue.toFixed(2)}</p></div>
+                        <div><p className="text-[8px] font-black uppercase text-gray-400">Paid</p><p className="font-black text-sm text-green-600">${contest.totalPaid.toFixed(2)}</p></div>
+                        <div><p className="text-[8px] font-black uppercase text-gray-400">Owed</p><p className={`font-black text-sm ${contest.outstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>${contest.outstanding.toFixed(2)}</p></div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
 
               <form onSubmit={handleSaveParticipant} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
