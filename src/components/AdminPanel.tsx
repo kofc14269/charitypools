@@ -29,6 +29,7 @@ interface AdminPanelProps {
   onUnassignSquare: (squareId: number) => void;
   onClearUserBoxes: (participantId: string) => void;
   onApplyPayment: (participantId: string, amount: number, method: string, note?: string, timestamp?: number) => void;
+  onApplyPaymentAcrossContests: (participantId: string, amount: number, method: string, note?: string, timestamp?: number) => void;
   onEditPayment: (participantId: string, transactionId: string, amount: number, method: string, note?: string, timestamp?: number) => void;
   onDeletePayment: (participantId: string, transactionId: string) => void;
   onResetGrid: () => void;
@@ -62,6 +63,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   onUnassignSquare,
   onClearUserBoxes,
   onApplyPayment,
+  onApplyPaymentAcrossContests,
   onEditPayment,
   onDeletePayment,
   onResetGrid,
@@ -471,7 +473,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 settings={{ ...globalSettings, ...poolSettings }} poolName={activePool?.name}
                 onUpdateSquare={onUpdateSquare} onUpdateParticipant={onUpdateParticipant} onUpdateScore={onUpdateScore}
                 onUnassignSquare={onUnassignSquare} onClearUserBoxes={onClearUserBoxes}
-                onApplyPayment={onApplyPayment} onEditPayment={onEditPayment} onDeletePayment={onDeletePayment}
+                onApplyPayment={onApplyPayment} onApplyPaymentAcrossContests={onApplyPaymentAcrossContests} onEditPayment={onEditPayment} onDeletePayment={onDeletePayment}
               />
             )}
 

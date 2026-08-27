@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { Pool } from '../../types';
-import { calculateParticipantContestBalances } from '../finance';
+import { allocatePaymentAcrossContestBalances, calculateParticipantContestBalances } from '../finance';
 
 const settings = {
   teamA: 'A', teamB: 'B', costPerBox: 10,
@@ -37,6 +37,18 @@ describe('calculateParticipantContestBalances', () => {
     expect(calculateParticipantContestBalances(pools, 'p1')).toEqual([
       expect.objectContaining({ poolName: 'Contest One', entryCount: 2, totalDue: 20, totalPaid: 10, outstanding: 10 }),
       expect.objectContaining({ poolName: 'Contest Two', entryCount: 1, totalDue: 20, totalPaid: 5, outstanding: 15 }),
+    ]);
+  });
+
+  test('allocates a payment oldest balance first without overpaying a contest', () => {
+    const balances = [
+      { poolId: 'old', poolName: 'Old', poolType: 'squares' as const, entryCount: 2, totalDue: 20, totalPaid: 5, outstanding: 15 },
+      { poolId: 'new', poolName: 'New', poolType: 'squares' as const, entryCount: 3, totalDue: 30, totalPaid: 0, outstanding: 30 },
+    ];
+
+    expect(allocatePaymentAcrossContestBalances(balances, 25).map(({ poolId, appliedAmount }) => ({ poolId, appliedAmount }))).toEqual([
+      { poolId: 'old', appliedAmount: 15 },
+      { poolId: 'new', appliedAmount: 10 },
     ]);
   });
 });

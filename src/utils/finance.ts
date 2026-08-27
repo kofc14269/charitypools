@@ -10,6 +10,23 @@ export interface ParticipantContestBalance {
   outstanding: number;
 }
 
+export interface ContestPaymentAllocation extends ParticipantContestBalance {
+  appliedAmount: number;
+}
+
+export const allocatePaymentAcrossContestBalances = (
+  balances: ParticipantContestBalance[],
+  paymentAmount: number
+): ContestPaymentAllocation[] => {
+  let remaining = Math.max(0, paymentAmount);
+  return balances.flatMap(balance => {
+    if (remaining <= 0 || balance.outstanding <= 0) return [];
+    const appliedAmount = Math.min(remaining, balance.outstanding);
+    remaining -= appliedAmount;
+    return [{ ...balance, appliedAmount }];
+  });
+};
+
 /** Entry-fee balances for one participant across every contest owned by an admin. */
 export const calculateParticipantContestBalances = (
   pools: Pool[],

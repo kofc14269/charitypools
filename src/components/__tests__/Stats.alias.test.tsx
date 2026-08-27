@@ -90,7 +90,7 @@ describe('Stats participant identity display', () => {
         expect(container.textContent).toContain('Paid: $5.00');
         expect(container.textContent).toContain('Won: $20.00');
         expect(container.textContent).toContain('Paid Out: $0.00');
-        expect(container.textContent).toContain('Owed: $0.00');
+        expect(container.textContent).toContain('All Contests Owed: $5.00');
 
         await act(async () => {
             fireEvent.click(getByText(container, /add payment/i));

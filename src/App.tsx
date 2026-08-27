@@ -26,6 +26,7 @@ const PoolPortal = lazy(() => import('./components/PoolPortal'));
 import { fetchScores, GameEvent } from './services/sportsApi';
 import { resolveTargetPoolId } from './utils/poolTarget';
 import { getAvailableSquarePools, PoolSelections } from './utils/multiPoolCheckout';
+import { allocatePaymentAcrossContestBalances, calculateParticipantContestBalances } from './utils/finance';
 
 const createNewSquares = (): Square[] => Array.from({ length: 100 }, (_, i) => ({
   id: i,
@@ -856,6 +857,54 @@ const App: React.FC = () => {
     atomicUpdateFinancials(participantId, newParticipants);
   }, [state, activePool, atomicUpdateFinancials]);
 
+  const handleApplyPaymentAcrossContests = useCallback((participantId: string, amount: number, method: string, note?: string, timestamp?: number) => {
+    if (!state || !activePool || !ownerUid || !Number.isFinite(amount) || amount <= 0) return;
+
+    const activePoolId = resolveTargetPoolId(state, activePool);
+    const orderedPools = [...state.pools].sort((left, right) => {
+      if (left.id === activePoolId) return -1;
+      if (right.id === activePoolId) return 1;
+      return left.createdAt - right.createdAt;
+    });
+    const balances = calculateParticipantContestBalances(orderedPools, participantId);
+    const allocations = allocatePaymentAcrossContestBalances(balances, amount);
+    if (allocations.length === 0) return;
+
+    const updates: Record<string, any> = {};
+    allocations.forEach(allocation => {
+      const poolIndex = state.pools.findIndex(pool => pool.id === allocation.poolId);
+      if (poolIndex === -1) return;
+      const pool = state.pools[poolIndex];
+      const participantIndex = (pool.participants || []).findIndex(participant => String(participant.id) === String(participantId));
+      if (participantIndex === -1) return;
+
+      const participant = pool.participants[participantIndex];
+      const transaction: any = {
+        id: crypto.randomUUID(),
+        amount: allocation.appliedAmount,
+        method,
+        timestamp: timestamp || Date.now(),
+      };
+      if (note?.trim()) transaction.note = note.trim();
+      updates[`users/${ownerUid}/state/pools/${poolIndex}/participants/${participantIndex}/paymentHistory`] = [
+        ...(participant.paymentHistory || []),
+        transaction,
+      ];
+
+      if (pool.type === 'squares') {
+        let paidRemaining = allocation.totalPaid + allocation.appliedAmount;
+        (pool.squares || []).forEach((square, squareIndex) => {
+          if (String(square.participantId || '') !== String(participantId)) return;
+          const paidAmount = Math.min(paidRemaining, pool.settings.costPerBox || 0);
+          paidRemaining = Math.max(0, paidRemaining - paidAmount);
+          updates[`users/${ownerUid}/state/pools/${poolIndex}/squares/${squareIndex}/paidAmount`] = paidAmount;
+        });
+      }
+    });
+
+    update(ref(db), updates).catch(err => alert(`Payment Failed: ${err.message}`));
+  }, [state, ownerUid, activePool]);
+
   const handleEditPayment = useCallback((participantId: string, transactionId: string, amount: number, method: string, note?: string, timestamp?: number) => {
     if (!state || !activePool) return;
     const newParticipants = activePool.participants.map(p => {
@@ -1383,6 +1432,7 @@ const App: React.FC = () => {
                 onUnassignSquare={handleUnassignSquare}
                 onClearUserBoxes={handleClearUserBoxes}
                 onApplyPayment={handleApplyPayment}
+                onApplyPaymentAcrossContests={handleApplyPaymentAcrossContests}
                 onEditPayment={handleEditPayment}
                 onDeletePayment={handleDeletePayment}
                 onAddScore={handleAddScore}
