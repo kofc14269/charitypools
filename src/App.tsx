@@ -1267,6 +1267,7 @@ const App: React.FC = () => {
                 onCheckout={beginCheckout}
                 onSetPendingSelection={setActivePendingSelection}
                 activePool={activePool}
+                isAdmin={isAdminAuthenticated}
               />
             </div>
           )

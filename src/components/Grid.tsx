@@ -12,9 +12,10 @@ interface GridProps {
   onCheckout?: () => void;
   onSetPendingSelection?: (ids: number[]) => void;
   activePool: Pool;
+  isAdmin?: boolean;
 }
 
-const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSquareClick, participants, onCheckout, onSetPendingSelection, activePool }) => {
+const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSquareClick, participants, onCheckout, onSetPendingSelection, activePool, isAdmin = false }) => {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [zoom, setZoom] = useState(1);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -348,7 +349,9 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
                       return (
                         <div
                           key={sq.id}
-                          title={sq.assigned ? `Player: ${fullName}\nAlias: ${displayAlias}` : `Box #${sq.id + 1}`}
+                          title={sq.assigned
+                            ? (isAdmin ? `Player: ${fullName}\nAlias: ${displayAlias}` : `Alias: ${displayAlias}`)
+                            : `Box #${sq.id + 1}`}
                           className={`group square-box cursor-pointer ${LABEL_WIDTH_CLASS} h-24 md:h-36 flex flex-col items-center justify-center p-2 transition-all relative ${isWinner ? 'bg-yellow-100 !border-yellow-300' :
                             sq.assigned ? (isFullyPaid ? 'bg-green-50' : (isPartiallyPaid ? 'bg-orange-50' : 'bg-indigo-50')) :
                               (isPendingInCart ? 'bg-indigo-600 ring-4 ring-indigo-400/50 scale-95 z-10 shadow-inner' : (settings?.isLocked ? 'bg-gray-100' : 'bg-white'))
@@ -359,12 +362,14 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
 
                           {sq.assigned ? (
                             <div className="flex flex-col items-center justify-center w-full h-full relative z-10 text-center overflow-hidden">
-                              <span className={`text-[10px] md:text-[14px] font-black ${isFullyPaid ? 'text-green-600' : 'text-indigo-950'} uppercase leading-tight line-clamp-3 break-words w-full group-hover:hidden px-1`}>
+                              <span className={`text-[10px] md:text-[14px] font-black ${isFullyPaid ? 'text-green-600' : 'text-indigo-950'} uppercase leading-tight line-clamp-3 break-words w-full ${isAdmin ? 'group-hover:hidden' : ''} px-1`}>
                                 {displayAlias}
                               </span>
-                              <span className={`hidden group-hover:block text-[9px] md:text-[12px] font-black ${isFullyPaid ? 'text-green-700' : 'text-indigo-800'} uppercase leading-tight line-clamp-3 break-words w-full animate-in fade-in duration-200 px-1 italic`}>
-                                {fullName}
-                              </span>
+                              {isAdmin && (
+                                <span className={`hidden group-hover:block text-[9px] md:text-[12px] font-black ${isFullyPaid ? 'text-green-700' : 'text-indigo-800'} uppercase leading-tight line-clamp-3 break-words w-full animate-in fade-in duration-200 px-1 italic`}>
+                                  {fullName}
+                                </span>
+                              )}
                             </div>
                           ) : isPendingInCart ? (
                             <div className="animate-pulse no-print relative z-10"><i className="fas fa-shopping-cart text-white text-[12px] md:text-[18px]"></i></div>
