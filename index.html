@@ -30,25 +30,25 @@
     window.openPrintWindow = function (content) {
       const pw = window.open('', '_blank');
       if (!pw) return;
-      const head = '<head><title>Print</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" /><style>@page { size: auto; margin: 10mm; } html, body { min-height: 100%; } body { margin: 0; padding: 10mm; font-family: sans-serif; width: 100%; box-sizing: border-box; overflow: visible !important; } header, nav, .grid-controls, .status-bar, .no-print, .print-hidden, button { display: none !important; } .hidden { display: none !important; } .print\\:block { display: block !important; } .print\\:scale-100 { transform: scale(1) !important; } .print\\:scale-90 { transform: scale(0.9) !important; } .print\\:origin-top { transform-origin: top !important; } .print\\:transform-none { transform: none !important; } .print\\:zoom-100 { zoom: 1 !important; } .print-section { page-break-inside: avoid !important; } #printable-area { width: 100% !important; padding: 0 !important; margin: 0 !important; display: block !important; } main { overflow: visible !important; height: auto !important; padding: 0 !important; margin: 0 !important; display: block !important; } * { -webkit-print-color-adjust: exact !important; }<\/style><\/head>';
+      const head = '<head><title>Print</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" /><style>@page { size: auto; margin: 10mm; } .board-scale-frame { width: auto !important; height: auto !important; overflow: visible !important; } .board-scaled-content { transform: none !important; } html, body { min-height: 100%; } body { margin: 0; padding: 10mm; font-family: sans-serif; width: 100%; box-sizing: border-box; overflow: visible !important; } header, nav, .grid-controls, .status-bar, .no-print, .print-hidden, button { display: none !important; } .hidden { display: none !important; } .print\\:block { display: block !important; } .print\\:scale-100 { transform: scale(1) !important; } .print\\:scale-90 { transform: scale(0.9) !important; } .print\\:origin-top { transform-origin: top !important; } .print\\:transform-none { transform: none !important; } .print\\:zoom-100 { zoom: 1 !important; } .print-section { page-break-inside: avoid !important; } #printable-area { width: 100% !important; padding: 0 !important; margin: 0 !important; display: block !important; } main { overflow: visible !important; height: auto !important; padding: 0 !important; margin: 0 !important; display: block !important; } * { -webkit-print-color-adjust: exact !important; }<\/style><\/head>';
       pw.document.write('<!DOCTYPE html><html>' + head + '<body>' + content + '<\/body><\/html>');
       pw.document.close();
       pw.focus();
       setTimeout(() => { pw.print(); pw.close(); }, 700);
     };
   </script>
-  <script type="module" crossorigin src="./assets/index-D-CHkLLY.js"></script>
+  <script type="module" crossorigin src="./assets/index-BNZGWRbP.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/react-vendor-BUwNS7rP.js">
   <link rel="modulepreload" crossorigin href="./assets/vendor-BXWtuYvb.js">
   <link rel="modulepreload" crossorigin href="./assets/firebase-CFKx7LvH.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-CCqE9wUg.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-D7QZlP9h.css">
 </head>
 
 <body class="bg-gray-50 text-gray-900" style="height:100%; overflow:hidden; margin:0;">
   <!-- React mounts here -->
   <div id="root" style="height:100%; overflow:hidden;"></div>
 
-  <!-- Vite React entry point -->
+  <!-- Vite React entry point -->
 </body>
 
 </html>
