@@ -26,7 +26,7 @@ const PoolPortal = lazy(() => import('./components/PoolPortal'));
 import { fetchScores, GameEvent } from './services/sportsApi';
 import { resolveTargetPoolId } from './utils/poolTarget';
 import { getAvailableSquarePools, PoolSelections } from './utils/multiPoolCheckout';
-import { allocatePaymentAcrossContestBalances, calculateParticipantContestBalances } from './utils/finance';
+import { buildContestPaymentUpdates } from './utils/paymentUpdates';
 
 const createNewSquares = (): Square[] => Array.from({ length: 100 }, (_, i) => ({
   id: i,
@@ -527,7 +527,7 @@ const App: React.FC = () => {
       });
   }, [state, ownerUid]);
 
-  const atomicUpdateFinancials = useCallback((participantId: string, updatedParticipants: Participant[]) => {
+  const atomicUpdateFinancials = useCallback(async (participantId: string, updatedParticipants: Participant[]) => {
     if (!state || !activePool || !ownerUid) return;
     const targetPoolId = resolveTargetPoolId(state, activePool);
     const poolIndex = state.pools.findIndex(p => p.id === targetPoolId);
@@ -549,7 +549,7 @@ const App: React.FC = () => {
         updatedSquaresMap[`users/${ownerUid}/state/pools/${poolIndex}/squares/${idx}`] = {
           ...sq,
           paidAmount: paymentForThisBox,
-          alias: participant.alias
+          alias: participant.alias || sq.alias || ''
         };
       }
     });
@@ -559,7 +559,7 @@ const App: React.FC = () => {
       [`users/${ownerUid}/state/pools/${poolIndex}/participants`]: updatedParticipants
     };
 
-    update(ref(db), updates).catch(err => console.error("Firebase atomic financial update failed:", err));
+    await update(ref(db), updates);
   }, [state, activePool, ownerUid]);
 
   const handleEntrySubmit = useCallback((data: Omit<Participant, 'id'>, squareIds: number[], selectionsByPool?: PoolSelections) => {
@@ -848,7 +848,7 @@ const App: React.FC = () => {
     update(ref(db), updates);
   }, [state, activePool, ownerUid]);
 
-  const handleApplyPayment = useCallback((participantId: string, amount: number, method: string, note?: string, timestamp?: number) => {
+  const handleApplyPayment = useCallback(async (participantId: string, amount: number, method: string, note?: string, timestamp?: number) => {
     if (!state || !activePool) return;
     const targetPoolId = resolveTargetPoolId(state, activePool);
     const newParticipants = activePool.participants.map(p => {
@@ -862,58 +862,18 @@ const App: React.FC = () => {
       }
       return p;
     });
-    atomicUpdateFinancials(participantId, newParticipants);
+    await atomicUpdateFinancials(participantId, newParticipants);
   }, [state, activePool, atomicUpdateFinancials]);
 
-  const handleApplyPaymentAcrossContests = useCallback((participantId: string, amount: number, method: string, note?: string, timestamp?: number) => {
-    if (!state || !activePool || !ownerUid || !Number.isFinite(amount) || amount <= 0) return;
+  const handleApplyPaymentAcrossContests = useCallback(async (participantId: string, amount: number, method: string, note?: string, timestamp?: number) => {
+    if (!state || !activePool || !ownerUid) throw new Error('Contest is not ready. Refresh and try again.');
 
-    const activePoolId = resolveTargetPoolId(state, activePool);
-    const orderedPools = [...state.pools].sort((left, right) => {
-      if (left.id === activePoolId) return -1;
-      if (right.id === activePoolId) return 1;
-      return left.createdAt - right.createdAt;
-    });
-    const balances = calculateParticipantContestBalances(orderedPools, participantId);
-    const allocations = allocatePaymentAcrossContestBalances(balances, amount);
-    if (allocations.length === 0) return;
+    const updates = buildContestPaymentUpdates(state.pools, resolveTargetPoolId(state, activePool), globalParticipants,
+      ownerUid, participantId, amount, method, note, timestamp);
+    await update(ref(db), updates);
+  }, [state, ownerUid, activePool, globalParticipants]);
 
-    const updates: Record<string, any> = {};
-    allocations.forEach(allocation => {
-      const poolIndex = state.pools.findIndex(pool => pool.id === allocation.poolId);
-      if (poolIndex === -1) return;
-      const pool = state.pools[poolIndex];
-      const participantIndex = (pool.participants || []).findIndex(participant => String(participant.id) === String(participantId));
-      if (participantIndex === -1) return;
-
-      const participant = pool.participants[participantIndex];
-      const transaction: any = {
-        id: crypto.randomUUID(),
-        amount: allocation.appliedAmount,
-        method,
-        timestamp: timestamp || Date.now(),
-      };
-      if (note?.trim()) transaction.note = note.trim();
-      updates[`users/${ownerUid}/state/pools/${poolIndex}/participants/${participantIndex}/paymentHistory`] = [
-        ...(participant.paymentHistory || []),
-        transaction,
-      ];
-
-      if (pool.type === 'squares') {
-        let paidRemaining = allocation.totalPaid + allocation.appliedAmount;
-        (pool.squares || []).forEach((square, squareIndex) => {
-          if (String(square.participantId || '') !== String(participantId)) return;
-          const paidAmount = Math.min(paidRemaining, pool.settings.costPerBox || 0);
-          paidRemaining = Math.max(0, paidRemaining - paidAmount);
-          updates[`users/${ownerUid}/state/pools/${poolIndex}/squares/${squareIndex}/paidAmount`] = paidAmount;
-        });
-      }
-    });
-
-    update(ref(db), updates).catch(err => alert(`Payment Failed: ${err.message}`));
-  }, [state, ownerUid, activePool]);
-
-  const handleEditPayment = useCallback((participantId: string, transactionId: string, amount: number, method: string, note?: string, timestamp?: number) => {
+  const handleEditPayment = useCallback(async (participantId: string, transactionId: string, amount: number, method: string, note?: string, timestamp?: number) => {
     if (!state || !activePool) return;
     const newParticipants = activePool.participants.map(p => {
       if (p.id === participantId) {
@@ -929,10 +889,10 @@ const App: React.FC = () => {
       }
       return p;
     });
-    atomicUpdateFinancials(participantId, newParticipants);
+    await atomicUpdateFinancials(participantId, newParticipants);
   }, [state, activePool, atomicUpdateFinancials]);
 
-  const handleDeletePayment = useCallback((participantId: string, transactionId: string) => {
+  const handleDeletePayment = useCallback(async (participantId: string, transactionId: string) => {
     if (!state || !activePool) return;
     const newParticipants = activePool.participants.map(p => {
       if (p.id === participantId) {
@@ -943,7 +903,7 @@ const App: React.FC = () => {
       }
       return p;
     });
-    atomicUpdateFinancials(participantId, newParticipants);
+    await atomicUpdateFinancials(participantId, newParticipants);
   }, [state, activePool, atomicUpdateFinancials]);
 
   const handleUpdateParticipant = useCallback((id: string, updates: Partial<Participant>) => {

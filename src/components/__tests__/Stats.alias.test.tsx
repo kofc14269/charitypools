@@ -133,3 +133,39 @@ describe('Stats participant identity display', () => {
         container.remove();
     });
 });
+
+test('keeps failed payments open, waits for saving, and refreshes open payment history', async () => {
+  const participant: Participant = { id: 'p', name: 'Player', email: '', phone: '', alias: 'P', paymentHistory: [] };
+  const pool: Pool = { id: 'pool', name: 'Pool', type: 'squares', settings, participants: [participant], createdAt: 1,
+    squares: [{ id: 0, row: 0, col: 0, participantId: 'p', alias: 'P', assigned: true, paidAmount: 0 }] };
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const save = vi.fn().mockRejectedValueOnce(new Error('Permission denied'));
+  const render = (current: Pool) => root.render(<Stats activePool={current} pools={[current]} squares={current.squares!}
+    participants={current.participants} settings={settings} scores={[]} onUpdateSquare={vi.fn()} onUpdateParticipant={vi.fn()}
+    onUpdateScore={vi.fn()} onUnassignSquare={vi.fn()} onClearUserBoxes={vi.fn()} onApplyPayment={save}
+    onApplyPaymentAcrossContests={save} onEditPayment={save} onDeletePayment={vi.fn()} />);
+  await act(async () => render(pool));
+  await act(async () => fireEvent.click(getByText(container, 'Add Payment')));
+  await act(async () => fireEvent.submit(container.querySelector('#payment-amount')!.closest('form')!));
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain('Permission denied');
+  expect(container.querySelector('#payment-amount')).not.toBeNull();
+  let finish!: () => void;
+  save.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+  await act(async () => fireEvent.submit(container.querySelector('#payment-amount')!.closest('form')!));
+  expect((getByText(container, 'Saving Payment…') as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => finish());
+  expect(container.querySelector('#payment-amount')).toBeNull();
+  await act(async () => fireEvent.click(getByText(container, 'Manage')));
+  expect(container.textContent).toContain('No payments recorded for this pool.');
+  const updated = { ...pool, participants: [{ ...participant, paymentHistory: [{ id: 'paid', amount: 10, method: 'Cash', timestamp: 1 }] }],
+    squares: pool.squares!.map(s => ({ ...s, paidAmount: 10 })) };
+  await act(async () => render(updated));
+  expect(container.textContent).toContain('$10.00 via Cash');
+  expect(container.textContent).toContain('Paid: $10.00');
+  await act(async () => fireEvent.click(getByText(container, 'Edit')));
+  expect((container.querySelector('#payment-amount') as HTMLInputElement).max).toBe('');
+  await act(async () => root.unmount());
+  container.remove();
+});

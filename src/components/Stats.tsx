@@ -19,10 +19,10 @@ interface StatsProps {
   onUpdateScore: (score: ScoreEntry) => void;
   onUnassignSquare: (id: number) => void;
   onClearUserBoxes: (participantId: string) => void;
-  onApplyPayment: (participantId: string, amount: number, method: string, note?: string, timestamp?: number) => void;
-  onApplyPaymentAcrossContests?: (participantId: string, amount: number, method: string, note?: string, timestamp?: number) => void;
-  onEditPayment: (participantId: string, transactionId: string, amount: number, method: string, note?: string, timestamp?: number) => void;
-  onDeletePayment: (participantId: string, transactionId: string) => void;
+  onApplyPayment: (participantId: string, amount: number, method: string, note?: string, timestamp?: number) => void | Promise<void>;
+  onApplyPaymentAcrossContests?: (participantId: string, amount: number, method: string, note?: string, timestamp?: number) => void | Promise<void>;
+  onEditPayment: (participantId: string, transactionId: string, amount: number, method: string, note?: string, timestamp?: number) => void | Promise<void>;
+  onDeletePayment: (participantId: string, transactionId: string) => void | Promise<void>;
 }
 
 const Stats: React.FC<StatsProps> = ({
@@ -51,6 +51,8 @@ const Stats: React.FC<StatsProps> = ({
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [paymentNote, setPaymentNote] = useState('');
+  const [isSavingPayment, setIsSavingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
   const [editingWinningsTransactionId, setEditingWinningsTransactionId] = useState<string | null>(null);
   const [winningsPayoutAmount, setWinningsPayoutAmount] = useState('');
   const [winningsPayoutMethod, setWinningsPayoutMethod] = useState('Cash');
@@ -230,6 +232,7 @@ const Stats: React.FC<StatsProps> = ({
 
   const openAddPaymentModal = (p: any) => {
     const balance = allContestOwedByParticipant.get(p.id) ?? Math.max(0, p.netOwed || 0);
+    setPaymentError('');
     setPaymentModalParticipant(p);
     setEditingTransactionId(null);
     setPaymentDate(new Date().toISOString().split('T')[0]);
@@ -238,18 +241,28 @@ const Stats: React.FC<StatsProps> = ({
     setPaymentNote('');
   };
 
-  const handleConfirmPayment = (e: React.FormEvent) => {
+  const handleConfirmPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!paymentModalParticipant) return;
-    const amount = parseFloat(paymentAmount);
+    if (!paymentModalParticipant || isSavingPayment) return;
+    const amount = Number(paymentAmount);
     const parsedDate = new Date(paymentDate + 'T12:00:00Z').getTime();
-    if (!isNaN(amount) && amount >= 0) {
-      if (editingTransactionId) onEditPayment(paymentModalParticipant.id, editingTransactionId, amount, paymentMethod, paymentNote, parsedDate);
-      else if (onApplyPaymentAcrossContests) onApplyPaymentAcrossContests(paymentModalParticipant.id, amount, paymentMethod, paymentNote, parsedDate);
-      else onApplyPayment(paymentModalParticipant.id, amount, paymentMethod, paymentNote, parsedDate);
+    if (!Number.isFinite(amount) || amount < 0 || (!editingTransactionId && amount === 0) || !Number.isFinite(parsedDate)) {
+      setPaymentError('Enter a valid payment amount and date.');
+      return;
+    }
+    setIsSavingPayment(true);
+    setPaymentError('');
+    try {
+      if (editingTransactionId) await onEditPayment(paymentModalParticipant.id, editingTransactionId, amount, paymentMethod, paymentNote, parsedDate);
+      else if (onApplyPaymentAcrossContests) await onApplyPaymentAcrossContests(paymentModalParticipant.id, amount, paymentMethod, paymentNote, parsedDate);
+      else await onApplyPayment(paymentModalParticipant.id, amount, paymentMethod, paymentNote, parsedDate);
       setPaymentModalParticipant(null);
       setEditingTransactionId(null);
       setPaymentNote('');
+    } catch (error) {
+      setPaymentError(`Payment was not saved: ${error instanceof Error ? error.message : 'Please try again.'}`);
+    } finally {
+      setIsSavingPayment(false);
     }
   };
 
@@ -432,23 +445,24 @@ const Stats: React.FC<StatsProps> = ({
       </div>
 
       {paymentModalParticipant && (
-        <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-indigo-950/60 backdrop-blur-md">
+        <div className="fixed inset-0 z-[180] flex items-center justify-center p-4 bg-indigo-950/60 backdrop-blur-md">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden">
             <div className={`p-6 text-white bg-indigo-900 flex justify-between items-center`}>
               <div>
-                <h3 className="font-black uppercase text-sm">Apply Payment Across Contests</h3>
+                <h3 className="font-black uppercase text-sm">{editingTransactionId ? 'Edit Payment' : 'Apply Payment Across Contests'}</h3>
                 <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mt-1">
                   {paymentModalParticipant.name || 'Player'}
                   {paymentModalParticipant.alias ? ` (${String(paymentModalParticipant.alias).toUpperCase()})` : ''}
                 </p>
               </div>
-              <button type="button" title="Close payment modal" aria-label="Close payment modal" onClick={() => setPaymentModalParticipant(null)}><i className="fas fa-times"></i></button>
+              <button type="button" title="Close payment modal" aria-label="Close payment modal" disabled={isSavingPayment} onClick={() => setPaymentModalParticipant(null)}><i className="fas fa-times"></i></button>
             </div>
             <form onSubmit={handleConfirmPayment} className="p-6 space-y-4">
-              <div><label htmlFor="payment-amount" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Amount ($)</label><input id="payment-amount" required autoFocus type="number" min="0" max={allContestOwedByParticipant.get(paymentModalParticipant.id) ?? undefined} step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="w-full p-4 bg-gray-50 rounded-xl font-black text-lg outline-none focus:ring-2 focus:ring-indigo-500" /><p className="mt-2 text-[9px] font-bold text-gray-400">Applied to the active contest first, then the oldest outstanding contests, up to each balance.</p></div>
+              {paymentError && <p role="alert" className="text-sm text-red-700">{paymentError}</p>}
+              <div><label htmlFor="payment-amount" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Amount ($)</label><input id="payment-amount" required autoFocus type="number" min="0" max={editingTransactionId ? undefined : allContestOwedByParticipant.get(paymentModalParticipant.id) ?? undefined} step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="w-full p-4 bg-gray-50 rounded-xl font-black text-lg outline-none focus:ring-2 focus:ring-indigo-500" /><p className="mt-2 text-[9px] font-bold text-gray-400">Applied to the active contest first, then the oldest outstanding contests, up to each balance.</p></div>
               <div><label htmlFor="payment-date" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Date</label><input id="payment-date" required type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="w-full p-4 bg-gray-50 rounded-xl font-black text-lg outline-none focus:ring-2 focus:ring-indigo-500" /></div>
               <div><label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Method</label><div className="grid grid-cols-2 gap-2">{['Cash', 'Check', 'Zelle', 'Other'].map(m => (<button key={m} type="button" onClick={() => setPaymentMethod(m)} className={`py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${paymentMethod === m ? 'bg-indigo-900 text-white' : 'bg-white text-gray-400'}`}>{m}</button>))}</div></div>
-              <button type="submit" className={`w-full bg-green-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl`}>Confirm Payment</button>
+              <button type="submit" disabled={isSavingPayment} className={`w-full bg-green-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl`}>{isSavingPayment ? 'Saving Payment…' : 'Confirm Payment'}</button>
             </form>
           </div>
         </div>
@@ -537,11 +551,11 @@ const Stats: React.FC<StatsProps> = ({
                   <h4 className="text-sm font-black uppercase text-gray-900">Payment History</h4>
                   <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-1">Payments recorded for this participant in this pool.</p>
                 </div>
-                {(editModalParticipant.paymentHistory || []).length === 0 ? (
+                {(selectedParticipantStats?.paymentHistory || []).length === 0 ? (
                   <div className="rounded-2xl bg-gray-50 p-6 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">No payments recorded for this pool.</div>
                 ) : (
                   <div className="space-y-2">
-                    {(editModalParticipant.paymentHistory || []).slice().sort((a: any, b: any) => b.timestamp - a.timestamp).map((t: any) => (
+                    {(selectedParticipantStats?.paymentHistory || []).slice().sort((a: any, b: any) => b.timestamp - a.timestamp).map((t: any) => (
                       <div key={t.id} className="rounded-2xl border border-gray-100 p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
                         <div>
                           <p className="text-sm font-black text-gray-900 uppercase">${t.amount.toFixed(2)} via {t.method}</p>
@@ -553,6 +567,7 @@ const Stats: React.FC<StatsProps> = ({
                           <button
                             type="button"
                             onClick={() => {
+                              setPaymentError('');
                               setEditingTransactionId(t.id);
                               setPaymentDate(new Date(t.timestamp).toISOString().split('T')[0]);
                               setPaymentAmount(String(t.amount));
@@ -566,11 +581,8 @@ const Stats: React.FC<StatsProps> = ({
                             type="button"
                             onClick={() => {
                               if (window.confirm('Delete this payment?')) {
-                                onDeletePayment(editModalParticipant.id, t.id);
-                                setEditModalParticipant({
-                                  ...editModalParticipant,
-                                  paymentHistory: (editModalParticipant.paymentHistory || []).filter((tx: any) => tx.id !== t.id)
-                                });
+                                Promise.resolve(onDeletePayment(editModalParticipant.id, t.id))
+                                  .catch(error => alert(`Payment was not deleted: ${error.message}`));
                               }
                             }}
                             className="px-4 py-3 rounded-xl bg-red-50 text-red-600 border border-red-100 font-black uppercase tracking-widest text-[10px] hover:bg-red-100 transition-all"

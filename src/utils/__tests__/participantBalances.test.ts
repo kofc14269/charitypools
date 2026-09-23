@@ -1,3 +1,4 @@
+import { buildContestPaymentUpdates } from '../paymentUpdates';
 import { describe, expect, test } from 'vitest';
 import { Pool } from '../../types';
 import { allocatePaymentAcrossContestBalances, calculateParticipantContestBalances } from '../finance';
@@ -50,5 +51,23 @@ describe('calculateParticipantContestBalances', () => {
       { poolId: 'old', appliedAmount: 15 },
       { poolId: 'new', appliedAmount: 10 },
     ]);
+  });
+});
+
+describe('admin guest payments', () => {
+  test('saves guest payment history and squares together without copying global payments', () => {
+    const guest = { id: 'guest', name: 'Guest', email: '', phone: '', alias: 'G', paymentHistory: [{ id: 'other', amount: 90, method: 'Cash', timestamp: 1 }] };
+    const makePool = (id: string, createdAt: number): Pool => ({
+      id, name: id, type: 'squares', settings, createdAt, participants: [],
+      squares: [{ id: 0, row: 0, col: 0, participantId: 'guest', alias: 'G', paidAmount: 0, assigned: true }],
+    });
+    const pools = [makePool('old', 1), makePool('active', 2)];
+    const updates = buildContestPaymentUpdates(pools, 'active', [guest], 'owner', 'guest', 15, 'Cash');
+    expect(updates['users/owner/state/pools/1/participants/0'].paymentHistory).toEqual([expect.objectContaining({ amount: 10 })]);
+    expect(updates['users/owner/state/pools/0/participants/0'].paymentHistory).toEqual([expect.objectContaining({ amount: 5 })]);
+    expect(updates['users/owner/state/pools/1/squares/0/paidAmount']).toBe(10);
+    expect(updates['users/owner/state/pools/0/squares/0/paidAmount']).toBe(5);
+    expect(pools[0].participants).toEqual([]);
+    expect(() => buildContestPaymentUpdates(pools, 'active', [], 'owner', 'guest', 15, 'Cash')).toThrow('Participant details');
   });
 });
