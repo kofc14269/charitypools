@@ -2,7 +2,7 @@ import React from 'react';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { fireEvent, getByText, getByPlaceholderText } from '@testing-library/dom';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import EntryModal from '../EntryModal';
 import { GameSettings, Participant, Pool, Square, ThirteenRunData } from '../../types';
 
@@ -136,13 +136,14 @@ describe('EntryModal legacy alias matching', () => {
         const container = document.createElement('div');
         document.body.appendChild(container);
         const root = createRoot(container);
+        const onSubmit = vi.fn();
 
         await act(async () => {
             root.render(
                 <EntryModal
                     isOpen={true}
                     onClose={() => { }}
-                    onSubmit={() => { }}
+                    onSubmit={onSubmit}
                     onUnassign={() => { }}
                     onSetPendingSelection={() => { }}
                     selectedSquareIds={[1]}
@@ -158,11 +159,18 @@ describe('EntryModal legacy alias matching', () => {
             fireEvent.change(getByPlaceholderText(container, 'Full Name'), { target: { value: 'Frank Romano' } });
             fireEvent.change(getByPlaceholderText(container, 'Email Address (optional)'), { target: { value: 'frank@example.com' } });
             fireEvent.change(getByPlaceholderText(container, 'Alias (Visible on Grid)'), { target: { value: 'frank romano' } });
+            fireEvent.change(getByPlaceholderText(container, 'Sold By (5 Characters)'), { target: { value: 'abc123' } });
         });
 
         await act(async () => {
             fireEvent.click(getByText(container, /Confirm & Register/i));
         });
+
+        expect(onSubmit).toHaveBeenCalledWith(
+            expect.objectContaining({ soldBy: 'ABC12' }),
+            expect.arrayContaining([1]),
+            undefined
+        );
 
         const assignedPool = {
             ...unassignedPool,

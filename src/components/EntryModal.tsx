@@ -46,6 +46,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
     email: '',
     phone: '',
     alias: '',
+    soldBy: '',
   });
 
   const isTeamEntry = activePool.type === '13run' && !!selectedTeamId;
@@ -175,11 +176,12 @@ const EntryModal: React.FC<EntryModalProps> = ({
             email: p.email,
             phone: p.phone,
             alias: p.alias.toUpperCase(),
+            soldBy: (p.soldBy || '').toUpperCase(),
           });
         }
       }
     } else {
-      setFormData({ name: '', email: '', phone: '', alias: '' });
+      setFormData({ name: '', email: '', phone: '', alias: '', soldBy: '' });
     }
   }, [isOpen]);
 
@@ -202,11 +204,12 @@ const EntryModal: React.FC<EntryModalProps> = ({
             email: p.email,
             phone: p.phone,
             alias: p.alias.toUpperCase(),
+            soldBy: (p.soldBy || '').toUpperCase(),
           });
         }
       }
     } else {
-      setFormData({ name: '', email: '', phone: '', alias: '' });
+      setFormData({ name: '', email: '', phone: '', alias: '', soldBy: '' });
     }
   }, [isOpen, isSubmitted, allAssigned, currentSelection, existingParticipants, isTeamEntry, selectedTeam]);
 
@@ -231,7 +234,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
     const pId = e.target.value;
     if (!pId) return;
     const p = existingParticipants.find(part => part.id === pId);
-    if (p) setFormData(prev => ({ ...prev, name: p.name, email: p.email, phone: p.phone, alias: p.alias.toUpperCase() }));
+    if (p) setFormData(prev => ({ ...prev, name: p.name, email: p.email, phone: p.phone, alias: p.alias.toUpperCase(), soldBy: (p.soldBy || '').toUpperCase() }));
   };
 
   const submitEntry = () => {
@@ -248,6 +251,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
       email,
       phone,
       alias,
+      soldBy: formData.soldBy.trim().toUpperCase().slice(0, 5),
     };
 
     onSubmit(normalizedData, allSquaresInCheckout.map(s => s.id), isMultiPoolCheckout ? selectionsByPool : undefined);
@@ -476,6 +480,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
                 {(!formData.email.trim() && !formData.phone.trim()) && <p className="text-red-500 text-[10px] font-bold uppercase">Require either email or phone</p>}
               </div>
               <input required maxLength={16} value={formData.alias} onChange={e => setFormData(prev => ({ ...prev, alias: e.target.value.toUpperCase() }))} className="w-full p-4 bg-indigo-50 rounded-xl font-black text-indigo-900 uppercase text-sm outline-none" placeholder="Alias (Visible on Grid)" />
+              <input maxLength={5} value={formData.soldBy} onChange={e => setFormData(prev => ({ ...prev, soldBy: e.target.value.toUpperCase().slice(0, 5) }))} className="w-full p-4 bg-gray-50 rounded-xl font-bold uppercase text-sm outline-none" placeholder="Sold By (5 Characters)" aria-label="Sold by" />
               <button type="submit" disabled={!formData.name.trim() || (!formData.email.trim() && !formData.phone.trim()) || !formData.alias.trim()} className="w-full bg-indigo-900 text-white py-4 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl disabled:opacity-50">Confirm & Register</button>
             </form>
           ) : isSubmitted ? (

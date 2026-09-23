@@ -123,6 +123,7 @@ export default {
       `Alias: ${clean(storedParticipant.alias) || "Not provided"}`,
       `Email: ${clean(storedParticipant.email) || "Not provided"}`,
       `Phone: ${clean(storedParticipant.phone) || "Not provided"}`,
+      `Sold by: ${clean(storedParticipant.soldBy, 5) || "Not provided"}`,
       `Reserved: ${reservedAt} ET`,
     ].join("\n");
 

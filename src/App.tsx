@@ -78,7 +78,7 @@ interface ReservationNotification {
   poolId: string;
   poolName: string;
   notificationEmail: string;
-  participant: Pick<Participant, 'id' | 'name' | 'alias' | 'email' | 'phone'>;
+  participant: Pick<Participant, 'id' | 'name' | 'alias' | 'email' | 'phone' | 'soldBy'>;
   boxes: Array<Pick<Square, 'id' | 'row' | 'col'>>;
   reservedAt: number;
 }
@@ -591,10 +591,14 @@ const App: React.FC = () => {
         email: data.email || '',
         phone: data.phone || '',
         alias: data.alias || '',
+        soldBy: (data.soldBy || '').toUpperCase().slice(0, 5),
       };
       updates[`users/${ownerUid}/state/guestParticipants/${currentUser!.uid}`] = participant;
     } else if (!participant) {
       participant = { ...data, id: crypto.randomUUID(), paymentHistory: [] } as Participant;
+      updates[`users/${ownerUid}/state/participants`] = [...(state.participants || []).filter(pp => pp.id !== participant!.id), participant];
+    } else {
+      participant = { ...participant, soldBy: (data.soldBy || '').toUpperCase().slice(0, 5) };
       updates[`users/${ownerUid}/state/participants`] = [...(state.participants || []).filter(pp => pp.id !== participant!.id), participant];
     }
 
@@ -621,6 +625,7 @@ const App: React.FC = () => {
             ...square,
             participantId: participant!.id,
             alias: (data.alias || participant!.alias || '').toUpperCase(),
+            soldBy: (data.soldBy || '').toUpperCase().slice(0, 5),
             assigned: true,
             paidAmount: 0,
           };
@@ -638,6 +643,7 @@ const App: React.FC = () => {
               alias: data.alias || participant!.alias || '',
               email: data.email || participant!.email || '',
               phone: data.phone || participant!.phone || '',
+              soldBy: (data.soldBy || participant!.soldBy || '').toUpperCase().slice(0, 5),
             },
             boxes: availableIds.map(squareId => {
               const square = (selectedPool.squares || [])[squareId];
@@ -679,6 +685,7 @@ const App: React.FC = () => {
           ...(activePool.squares[sid] || {}),
           participantId: participant!.id,
           alias: (data.alias || participant!.alias || '').toUpperCase(),
+          soldBy: (data.soldBy || '').toUpperCase().slice(0, 5),
           assigned: true,
           paidAmount: 0, // always reset — financials are set by atomicUpdateFinancials after
         };
@@ -696,6 +703,7 @@ const App: React.FC = () => {
             alias: data.alias || participant!.alias || '',
             email: data.email || participant!.email || '',
             phone: data.phone || participant!.phone || '',
+            soldBy: (data.soldBy || participant!.soldBy || '').toUpperCase().slice(0, 5),
           },
           boxes: squareIds.map(sid => {
             const square = activePool.squares?.[sid];

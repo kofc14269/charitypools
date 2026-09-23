@@ -56,7 +56,7 @@ const Stats: React.FC<StatsProps> = ({
   const [winningsPayoutMethod, setWinningsPayoutMethod] = useState('Cash');
   const [winningsPayoutNote, setWinningsPayoutNote] = useState('');
 
-  const [editFormData, setEditFormData] = useState({ name: '', email: '', phone: '', alias: '' });
+  const [editFormData, setEditFormData] = useState({ name: '', email: '', phone: '', alias: '', soldBy: '' });
 
   const getParticipantAlias = (participant: Participant) => String(participant.alias || '').trim().toUpperCase();
 
@@ -260,6 +260,7 @@ const Stats: React.FC<StatsProps> = ({
       email: participant.email || '',
       phone: participant.phone || '',
       alias: participant.alias || '',
+      soldBy: participant.soldBy || '',
     });
     setEditingWinningsTransactionId(null);
     setWinningsPayoutAmount('');
@@ -275,6 +276,7 @@ const Stats: React.FC<StatsProps> = ({
       email: editFormData.email.trim(),
       phone: editFormData.phone.trim(),
       alias: editFormData.alias.trim().toUpperCase(),
+      soldBy: editFormData.soldBy.trim().toUpperCase().slice(0, 5),
     });
     setEditModalParticipant(null);
     setEditingWinningsTransactionId(null);
@@ -523,6 +525,7 @@ const Stats: React.FC<StatsProps> = ({
                   <div><label htmlFor="participant-alias" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Alias</label><input id="participant-alias" value={editFormData.alias} onChange={(e) => setEditFormData(prev => ({ ...prev, alias: e.target.value.toUpperCase() }))} className="w-full p-4 bg-gray-50 rounded-xl font-bold uppercase outline-none focus:ring-2 focus:ring-indigo-500" /></div>
                   <div><label htmlFor="participant-email" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Email</label><input id="participant-email" type="email" value={editFormData.email} onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))} className="w-full p-4 bg-gray-50 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" /></div>
                   <div><label htmlFor="participant-phone" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Phone</label><input id="participant-phone" value={editFormData.phone} onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value }))} className="w-full p-4 bg-gray-50 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                  <div><label htmlFor="participant-sold-by" className="text-[9px] font-black uppercase text-gray-400 block mb-2">Sold By</label><input id="participant-sold-by" maxLength={5} value={editFormData.soldBy} onChange={(e) => setEditFormData(prev => ({ ...prev, soldBy: e.target.value.toUpperCase().slice(0, 5) }))} className="w-full p-4 bg-gray-50 rounded-xl font-bold uppercase outline-none focus:ring-2 focus:ring-indigo-500" /></div>
                 </div>
                 <div className="flex justify-end">
                   <button type="submit" className="bg-indigo-900 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-black transition-all">Save Participant</button>

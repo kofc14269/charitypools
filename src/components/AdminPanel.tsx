@@ -84,7 +84,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [showAddNameForm, setShowAddNameForm] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingParticipantId, setEditingParticipantId] = useState<string | null>(null);
-  const [newNameData, setNewNameData] = useState({ name: '', email: '', phone: '', alias: '' });
+  const [newNameData, setNewNameData] = useState({ name: '', email: '', phone: '', alias: '', soldBy: '' });
   const [newPoolData, setNewPoolData] = useState({ name: '', type: 'squares' as PoolType, teamA: 'Team A', teamB: 'Team B', costPerBox: 10 });
 
   const financialSummary = useMemo(() => {
@@ -129,12 +129,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       email: newNameData.email.trim(),
       phone: newNameData.phone.trim(),
       alias: newNameData.alias.trim().toUpperCase(),
+      soldBy: newNameData.soldBy.trim().toUpperCase().slice(0, 5),
     };
 
     if (editingParticipantId) {
       onUpdateParticipant(editingParticipantId, participantPayload);
       setEditingParticipantId(null);
-      setNewNameData({ name: '', email: '', phone: '', alias: '' });
+      setNewNameData({ name: '', email: '', phone: '', alias: '', soldBy: '' });
       setShowAddNameForm(false);
       return;
     }
@@ -144,7 +145,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       ...participantPayload,
       paymentHistory: []
     });
-    setNewNameData({ name: '', email: '', phone: '', alias: '' });
+    setNewNameData({ name: '', email: '', phone: '', alias: '', soldBy: '' });
     setShowAddNameForm(false);
   };
 
@@ -154,14 +155,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       name: participant.name || '',
       email: participant.email || '',
       phone: participant.phone || '',
-      alias: participant.alias || ''
+      alias: participant.alias || '',
+      soldBy: participant.soldBy || ''
     });
     setShowAddNameForm(true);
   };
 
   const handleCancelParticipantForm = () => {
     setEditingParticipantId(null);
-    setNewNameData({ name: '', email: '', phone: '', alias: '' });
+    setNewNameData({ name: '', email: '', phone: '', alias: '', soldBy: '' });
     setShowAddNameForm(false);
   };
 
@@ -302,6 +304,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div><label className="text-[9px] font-black text-indigo-400 uppercase block mb-1">Phone</label><input title="Phone" value={newNameData.phone} onChange={e => setNewNameData({ ...newNameData, phone: e.target.value })} className="w-full p-4 bg-white rounded-xl font-bold outline-none border-2 border-transparent focus:border-indigo-400 transition-all" /></div>
                       <div><label className="text-[9px] font-black text-indigo-400 uppercase block mb-1">Alias</label><input title="Alias" value={newNameData.alias} onChange={e => setNewNameData({ ...newNameData, alias: e.target.value.toUpperCase() })} className="w-full p-4 bg-white rounded-xl font-bold outline-none border-2 border-transparent focus:border-indigo-400 transition-all uppercase" /></div>
+                      <div><label className="text-[9px] font-black text-indigo-400 uppercase block mb-1">Sold By</label><input title="Sold by" maxLength={5} value={newNameData.soldBy} onChange={e => setNewNameData({ ...newNameData, soldBy: e.target.value.toUpperCase().slice(0, 5) })} className="w-full p-4 bg-white rounded-xl font-bold outline-none border-2 border-transparent focus:border-indigo-400 transition-all uppercase" /></div>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3">
                       <button type="submit" className="flex-1 py-4 bg-indigo-900 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl">{editingParticipantId ? 'Update Entry' : 'Complete Entry'}</button>
@@ -375,6 +378,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                             <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Square #</th>
                             <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Participant</th>
                             <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Alias</th>
+                            <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Sold By</th>
                             <th className="px-6 py-4 text-[10px] font-black text-indigo-400 uppercase">Contact</th>
                             <th className="px-6 py-4 text-right"></th>
                           </tr>
@@ -382,7 +386,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         <tbody>
                           {squareRows.length === 0 && (
                             <tr>
-                              <td colSpan={5} className="px-6 py-8 text-center text-gray-400 text-xs font-bold uppercase">No squares assigned yet</td>
+                              <td colSpan={6} className="px-6 py-8 text-center text-gray-400 text-xs font-bold uppercase">No squares assigned yet</td>
                             </tr>
                           )}
                           {squareRows.map(({ sq, p }) => (
@@ -390,6 +394,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                               <td className="px-6 py-4 font-black text-indigo-400 text-sm">#{sq.id + 1}</td>
                               <td className="px-6 py-4 font-black text-indigo-900 text-sm uppercase">{p.name}</td>
                               <td className="px-6 py-4 text-indigo-500 font-black text-[11px] uppercase">{p.alias || '--'}</td>
+                              <td className="px-6 py-4 text-indigo-500 font-black text-[11px] uppercase">{sq.soldBy || p.soldBy || '--'}</td>
                               <td className="px-6 py-4 text-indigo-400 font-bold text-[10px]">{p.email || p.phone || '--'}</td>
                               <td className="px-6 py-4 text-right">
                                 <div className="flex items-center justify-end gap-2">

@@ -13,6 +13,7 @@ export interface Participant {
   email: string;
   phone: string;
   alias: string;
+  soldBy?: string;
   paymentHistory?: PaymentTransaction[];
   winningsPayoutHistory?: PaymentTransaction[];
 }
@@ -23,6 +24,7 @@ export interface Square {
   col: number;
   participantId: string | null;
   alias: string;
+  soldBy?: string;
   paidAmount: number;
   paymentMethod?: string;
   assigned: boolean;
