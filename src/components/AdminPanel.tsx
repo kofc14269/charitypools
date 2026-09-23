@@ -347,7 +347,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                     className="w-full bg-white px-4 py-2 rounded-xl text-xs font-black text-indigo-900 border-none outline-none shadow-sm focus:ring-2 focus:ring-indigo-400"
                                   >
                                     <option value="">-- UNASSIGNED --</option>
-                                    {activePool.participants.map(p => <option key={p.id} value={p.id}>{p.alias ? `${p.name} (${p.alias})` : p.name}</option>)}
+                                    {[...activePool.participants].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })).map(p => <option key={p.id} value={p.id}>{p.alias ? `${p.name} (${p.alias})` : p.name}</option>)}
                                   </select>
                                 </td>
                                 <td className="px-6 py-4 text-center">
@@ -368,7 +368,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                       const p = participants.find(x => x.id === sq.participantId);
                       return p ? { sq, p } : null;
                     })
-                    .filter(Boolean) as { sq: Square; p: Participant }[];
+                    .filter(Boolean)
+                    .sort((a, b) => a!.p.name.localeCompare(b!.p.name, undefined, { sensitivity: 'base' })) as { sq: Square; p: Participant }[];
 
                   return (
                     <div className="bg-indigo-50/30 rounded-[2rem] border border-indigo-50 overflow-hidden">
@@ -428,7 +429,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         </tr>
                       </thead>
                       <tbody>
-                        {participants.map(p => (
+                        {[...participants].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })).map(p => (
                           <tr key={p.id} className="border-b border-indigo-50">
                             <td className="px-6 py-4 font-black text-indigo-400 text-sm">
                               {squares.filter(sq => sq.participantId === p.id).length > 0
