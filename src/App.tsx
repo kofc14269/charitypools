@@ -1,3 +1,4 @@
+import { subscribePublicState } from './services/publicState';
 import { buildSharedLink, copySharedLink, getContestTab, resolveSharedPool } from './utils/sharedLinks';
 
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from 'react';
@@ -152,6 +153,7 @@ const getHeaderLogoFallback = (label: string) => {
 const App: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [isFirebaseLoaded, setIsFirebaseLoaded] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('p') ? 'grid' : 'portal';
@@ -298,9 +300,11 @@ const App: React.FC = () => {
       return;
     }
 
+    if (!isAuthReady) return;
     setIsFirebaseLoaded(false);
+    setLoadError('');
     const stateRef = ref(db, `users/${ownerUid}/state`);
-    return onValue(stateRef, (snapshot) => {
+    const receiveState = (snapshot: { val: () => any }) => {
       const data = snapshot.val();
       if (data) {
         if (data.pools) {
@@ -371,8 +375,17 @@ const App: React.FC = () => {
         setState(initialState);
       }
       setIsFirebaseLoaded(true);
-    });
-  }, [ownerUid]);
+    };
+    const handleLoadError = (error: Error) => {
+      console.error('Contest loading failed:', error);
+      setLoadError('The contest could not be loaded. Please retry.');
+    };
+    const canReadAdminState = authUser && !authUser.isAnonymous
+      && (authUser.uid === ownerUid || authUser.email === 'kofc14269@gmail.com');
+    if (canReadAdminState) return onValue(stateRef, receiveState, handleLoadError);
+    return subscribePublicState(db, ownerUid, authUser?.isAnonymous ? authUser.uid : null,
+      data => receiveState({ val: () => data }), handleLoadError);
+  }, [ownerUid, isAuthReady, authUser?.uid, authUser?.isAnonymous, authUser?.email]);
 
   const activePool = useMemo(() => {
     if (!state || !state.pools) return null;
@@ -1064,6 +1077,13 @@ const App: React.FC = () => {
       setActiveTab('grid');
     });
   };
+
+  if (loadError) {
+    return <div className="min-h-screen bg-indigo-950 text-white flex flex-col items-center justify-center p-8 text-center">
+      <p role="alert">{loadError}</p>
+      <button className="mt-6 rounded-xl bg-white px-6 py-3 text-indigo-900 font-bold" onClick={() => window.location.reload()}>Retry</button>
+    </div>;
+  }
 
   if (!isFirebaseLoaded) {
     return (

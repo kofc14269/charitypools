@@ -10,20 +10,32 @@ vi.mock('firebase/auth', () => ({
   signInAnonymously: vi.fn().mockResolvedValue({}),
   signInWithEmailAndPassword: vi.fn(), createUserWithEmailAndPassword: vi.fn(), signInWithPopup: vi.fn(), signOut: vi.fn(),
 }));
-vi.mock('firebase/database', () => ({
-  ref: (_: unknown, path: string) => path,
-  onValue: (path: string, callback: any) => {
-    fixture.paths.push(path);
-    const deliver = () => callback({ val: () => ({ activePoolId: 'other', globalSettings: { charityName: 'Test Charity' }, participants: [],
+vi.mock('firebase/database', () => {
+  const valueAt = (path: string) => {
+    const data = { activePoolId: 'other', globalSettings: { charityName: 'Test Charity' }, participants: [],
       pools: [
         { id: 'other', name: 'Other Contest', type: 'squares', participants: [], squares: [], settings: {} },
         { id: 'shared', name: 'Shared Contest', type: fixture.type, participants: [], squares: [], settings: {} },
-      ] }) });
-    if (fixture.defer) fixture.deliver = deliver; else deliver();
-    return () => {};
-  },
-  set: vi.fn(), update: vi.fn(), get: vi.fn(),
-}));
+      ] };
+    return path.split('/').slice(3).reduce((value: any, key) => value?.[key], data) ?? null;
+  };
+  return {
+    ref: (_: unknown, path: string) => path,
+    onValue: (path: string, callback: any, failure: any) => {
+      fixture.paths.push(path);
+      if (path === 'users/owner/state' && fixture.user?.uid !== 'owner') {
+        failure(new Error('Permission denied for private parent record'));
+        return () => {};
+      }
+      const deliver = () => callback({ val: () => valueAt(path) });
+      if (fixture.defer && (path.endsWith('/poolCount') || path.endsWith('/state'))) fixture.deliver = deliver;
+      else deliver();
+      return () => {};
+    },
+    get: async (path: string) => { fixture.paths.push(path); return { val: () => valueAt(path) }; },
+    set: vi.fn(), update: vi.fn(),
+  };
+});
 vi.mock('../../services/sportsApi', () => ({ fetchScores: vi.fn().mockResolvedValue([]) }));
 vi.mock('../Grid', () => ({ default: () => <div>Public squares board</div> }));
 vi.mock('../SurvivorEngine', () => ({ default: () => <div>Public survivor board</div> }));
@@ -42,7 +54,9 @@ test.each([['squares', 'Public squares board'], ['survivor', 'Public survivor bo
     expect(container.textContent).toContain(label);
     expect(container.textContent).not.toContain('Sign in to manage your pools');
     expect((container.querySelector('select[aria-label="Select pool"]') as HTMLSelectElement).value).toBe('shared');
-    expect(fixture.paths).toContain('users/owner/state');
+    expect(fixture.paths).toContain('users/owner/state/pools/1/squares');
+    expect(fixture.paths).not.toContain('users/owner/state');
+    expect(fixture.paths.some(path => path.endsWith('/participants'))).toBe(false);
     await act(async () => root.unmount());
   }
 );
@@ -57,7 +71,9 @@ test('an existing admin session still opens the contest specified by the shared 
   await act(async () => root.render(<App />));
   expect(container.textContent).toContain('Public squares board');
   expect((container.querySelector('select[aria-label="Select pool"]') as HTMLSelectElement).value).toBe('shared');
-  expect(fixture.paths).toContain('users/owner/state');
+  expect(fixture.paths).toContain('users/owner/state/pools/1/squares');
+    expect(fixture.paths).not.toContain('users/owner/state');
+    expect(fixture.paths.some(path => path.endsWith('/participants'))).toBe(false);
   await act(async () => root.unmount());
 });
 
