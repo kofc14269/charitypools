@@ -199,3 +199,34 @@ describe('EntryModal legacy alias matching', () => {
         container.remove();
     });
 });
+
+test('reservation success waits for the server and failed saves keep the form open', async () => {
+  const pool = makePool();
+  pool.squares = [{ id: 0, row: 0, col: 0, participantId: null, alias: '', assigned: false, paidAmount: 0 }];
+  pool.participants = [];
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  let rejectSave!: (reason: Error) => void;
+  let completeSave!: () => void;
+  const save = vi.fn().mockImplementationOnce(() => new Promise<void>((_, reject) => { rejectSave = reject; }))
+    .mockImplementationOnce(() => new Promise<void>(resolve => { completeSave = resolve; }));
+  await act(async () => root.render(<EntryModal isOpen onClose={vi.fn()} onSubmit={save} onUnassign={vi.fn()}
+    onSetPendingSelection={vi.fn()} selectedSquareIds={[0]} activePool={pool} existingParticipants={[]} settings={settings} />));
+  await act(async () => {
+    fireEvent.change(getByPlaceholderText(container, 'Full Name'), { target: { value: 'Guest' } });
+    fireEvent.change(getByPlaceholderText(container, 'Email Address (optional)'), { target: { value: 'guest@example.com' } });
+    fireEvent.change(getByPlaceholderText(container, 'Alias (Visible on Grid)'), { target: { value: 'GUEST' } });
+  });
+  await act(async () => fireEvent.submit(container.querySelector('form')!));
+  expect(container.textContent).not.toContain('Successfully Claimed!');
+  expect((getByText(container, 'Saving Reservation…') as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => rejectSave(new Error('Box already reserved')));
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain('Box already reserved');
+  expect(container.textContent).not.toContain('Successfully Claimed!');
+  await act(async () => fireEvent.submit(container.querySelector('form')!));
+  await act(async () => completeSave());
+  expect(container.textContent).toContain('Successfully Claimed!');
+  await act(async () => root.unmount());
+  container.remove();
+});

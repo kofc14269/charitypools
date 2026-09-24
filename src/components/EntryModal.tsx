@@ -5,7 +5,7 @@ import { Participant, GameSettings, Square, Pool, ThirteenRunData } from '../typ
 interface EntryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Omit<Participant, 'id'>, ids: number[], selectionsByPool?: Record<string, number[]>) => void;
+  onSubmit: (data: Omit<Participant, 'id'>, ids: number[], selectionsByPool?: Record<string, number[]>) => void | Promise<void>;
   onUnassign: (id: number) => void;
   onSetPendingSelection: (ids: number[]) => void;
   selectedSquareIds: number[];
@@ -35,6 +35,8 @@ const EntryModal: React.FC<EntryModalProps> = ({
   selectionsByPool = {},
   onClearCheckout
 }) => {
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
@@ -154,6 +156,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
     if (!isOpen) return;
 
     setIsSubmitted(false);
+    setSaveError('');
     setIsVerified(false);
     setVerificationEmail('');
     setVerificationError(false);
@@ -237,7 +240,8 @@ const EntryModal: React.FC<EntryModalProps> = ({
     if (p) setFormData(prev => ({ ...prev, name: p.name, email: p.email, phone: p.phone, alias: p.alias.toUpperCase(), soldBy: (p.soldBy || '').toUpperCase() }));
   };
 
-  const submitEntry = () => {
+  const submitEntry = async () => {
+    if (isSaving) return;
     const email = formData.email.trim().toLowerCase();
     const phone = formData.phone.trim();
     const alias = formData.alias.trim().toUpperCase();
@@ -254,8 +258,16 @@ const EntryModal: React.FC<EntryModalProps> = ({
       soldBy: formData.soldBy.trim().toUpperCase().slice(0, 5),
     };
 
-    onSubmit(normalizedData, allSquaresInCheckout.map(s => s.id), isMultiPoolCheckout ? selectionsByPool : undefined);
-    setIsSubmitted(true);
+    setIsSaving(true);
+    setSaveError('');
+    try {
+      await onSubmit(normalizedData, currentSelection.map(s => s.id), checkoutGroups.length ? selectionsByPool : undefined);
+      setIsSubmitted(true);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Reservation was not saved. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -437,12 +449,13 @@ const EntryModal: React.FC<EntryModalProps> = ({
             </h2>
             <p className="text-indigo-300 text-[9px] font-bold uppercase tracking-widest mt-2 uppercase">{isAdmin ? 'ADMIN CONTROL ENABLED' : `Support ${settings.charityName}`}</p>
           </div>
-          <button onClick={onClose} className="bg-white/10 w-10 h-10 rounded-full flex items-center justify-center z-10"><i className="fas fa-times text-xl"></i></button>
+          <button disabled={isSaving} onClick={onClose} className="bg-white/10 w-10 h-10 rounded-full flex items-center justify-center z-10"><i className="fas fa-times text-xl"></i></button>
         </div>
 
         <div className="p-6 md:p-8 space-y-6 max-h-[80vh] overflow-y-auto scrollbar-hide">
           {!allAssigned && !isSubmitted ? (
             <form onSubmit={handleSubmit} className="space-y-5">
+              {saveError && <p role="alert" className="text-red-600 text-sm">{saveError}</p>}
               {existingParticipants.length > 0 && (
                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                   <label className="text-[9px] font-black uppercase text-indigo-400 mb-1 block">Quick Select Player</label>
@@ -481,7 +494,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
               </div>
               <input required maxLength={16} value={formData.alias} onChange={e => setFormData(prev => ({ ...prev, alias: e.target.value.toUpperCase() }))} className="w-full p-4 bg-indigo-50 rounded-xl font-black text-indigo-900 uppercase text-sm outline-none" placeholder="Alias (Visible on Grid)" />
               <input maxLength={5} value={formData.soldBy} onChange={e => setFormData(prev => ({ ...prev, soldBy: e.target.value.toUpperCase().slice(0, 5) }))} className="w-full p-4 bg-gray-50 rounded-xl font-bold uppercase text-sm outline-none" placeholder="Sold By (5 Characters)" aria-label="Sold by" />
-              <button type="submit" disabled={!formData.name.trim() || (!formData.email.trim() && !formData.phone.trim()) || !formData.alias.trim()} className="w-full bg-indigo-900 text-white py-4 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl disabled:opacity-50">Confirm & Register</button>
+              <button type="submit" disabled={isSaving || !formData.name.trim() || (!formData.email.trim() && !formData.phone.trim()) || !formData.alias.trim()} className="w-full bg-indigo-900 text-white py-4 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl disabled:opacity-50">{isSaving ? 'Saving Reservation…' : 'Confirm & Register'}</button>
             </form>
           ) : isSubmitted ? (
             <div className="text-center space-y-6">

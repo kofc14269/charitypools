@@ -1,3 +1,4 @@
+import { planBoxReservations, guestReservationUpdates } from './utils/reservations';
 import { subscribePublicState } from './services/publicState';
 import { buildSharedLink, copySharedLink, getContestTab, resolveSharedPool } from './utils/sharedLinks';
 
@@ -579,18 +580,17 @@ const App: React.FC = () => {
     await update(ref(db), updates);
   }, [state, activePool, ownerUid]);
 
-  const handleEntrySubmit = useCallback((data: Omit<Participant, 'id'>, squareIds: number[], selectionsByPool?: PoolSelections) => {
-    if (!state || !activePool || !ownerUid) return;
+  const handleEntrySubmit = useCallback(async (data: Omit<Participant, 'id'>, squareIds: number[], selectionsByPool?: PoolSelections) => {
+    if (!state || !activePool || !ownerUid) throw new Error('Contest is still loading. Please try again.');
     const targetPoolId = resolveTargetPoolId(state, activePool);
     const poolIndex = state.pools.findIndex(p => p.id === targetPoolId);
-    if (poolIndex === -1) return;
+    if (poolIndex === -1) throw new Error('Contest was not found. Refresh and try again.');
 
     // Use Alias as the sole unique identifier for an entry
     const normalize = (s: string) => (s || '').toLowerCase();
     const currentUser = auth.currentUser;
     if (new URLSearchParams(window.location.search).get('u') && !currentUser) {
-      alert('Secure reservation access is still loading. Please wait a moment and try again.');
-      return;
+      throw new Error('Secure reservation access is still loading. Please wait a moment and try again.');
     }
     const isAnonymousReservation = currentUser?.isAnonymous === true;
     let participant = isAnonymousReservation
@@ -619,7 +619,29 @@ const App: React.FC = () => {
       updates[`users/${ownerUid}/state/participants`] = [...(state.participants || []).filter(pp => pp.id !== participant!.id), participant];
     }
 
-    if (selectionsByPool && Object.keys(selectionsByPool).length > 1) {
+    if (isAnonymousReservation && activePool.type === 'squares') {
+      const groups = planBoxReservations(state.pools, targetPoolId!, squareIds, selectionsByPool);
+      // Verify the array positions still identify the intended contests before saving.
+      for (const group of groups) {
+        const actualId = (await get(ref(db, `users/${ownerUid}/state/pools/${group.poolIndex}/id`))).val();
+        if (actualId !== group.pool.id) throw new Error('The contests changed. Refresh the board before reserving.');
+      }
+      await update(ref(db), guestReservationUpdates(ownerUid, participant!, groups));
+      if (state.globalSettings.reservationNotificationsEnabled !== false) {
+        groups.forEach(({ pool, squareIds: ids }) => {
+          void sendReservationNotification({
+            ownerUid, poolId: pool.id, poolName: pool.name,
+            notificationEmail: state.globalSettings.reservationNotificationEmail || 'kofcsuperbowl@gmail.com',
+            participant: participant!,
+            boxes: ids.map(id => ({ id, row: pool.squares![id].row, col: pool.squares![id].col })),
+            reservedAt: Date.now(),
+          }).catch(error => console.error('Reservation email notification failed:', error));
+        });
+      }
+      return;
+    }
+
+    if (selectionsByPool && Object.values(selectionsByPool).some(ids => ids.length > 0)) {
       const multiPoolNotifications: ReservationNotification[] = [];
 
       Object.entries(selectionsByPool).forEach(([poolId, ids]) => {
@@ -675,14 +697,14 @@ const App: React.FC = () => {
         }
       });
 
-      update(ref(db), updates).then(() => {
+      await update(ref(db), updates).then(() => {
         multiPoolNotifications.forEach(notification => {
           void sendReservationNotification(notification)
             .catch(err => console.error('Reservation email notification failed:', err));
         });
         setSelectedSquareId(null);
         setSelectedTeamId(null);
-      }).catch(err => console.error(err));
+      });
       return;
     }
 
@@ -735,7 +757,7 @@ const App: React.FC = () => {
       }
     }
 
-    update(ref(db), updates).then(() => {
+    await update(ref(db), updates).then(() => {
       const currentUser = auth.currentUser;
       const canManageFinancials = currentUser?.uid === ownerUid || currentUser?.email === 'kofc14269@gmail.com';
       if (participant && canManageFinancials) atomicUpdateFinancials(participant.id, newPoolParticipants);
@@ -748,7 +770,7 @@ const App: React.FC = () => {
       const selectedClaimId = squareIds[0] ?? null;
       setSelectedSquareId(selectedClaimId);
       setSelectedTeamId(null);
-    }).catch(err => console.error(err));
+    });
   }, [state, activePool, atomicUpdateFinancials, ownerUid, selectedTeamId, setActivePendingSelection]);
 
   const handleSquareClick = useCallback((id: number) => {
