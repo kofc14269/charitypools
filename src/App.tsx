@@ -183,7 +183,7 @@ const App: React.FC = () => {
   const [headerLogoSrc, setHeaderLogoSrc] = useState(getHeaderLogoFallback('Kofc'));
 
   // Discover the UID of the data we should be looking at
-  const [ownerUid, setOwnerUid] = useState<string | null>(null);
+  const [ownerUid, setOwnerUid] = useState<string | null>(() => new URLSearchParams(window.location.search).get('u'));
 
   const [copiedContestId, setCopiedContestId] = useState<string | null>(null);
 
@@ -298,6 +298,7 @@ const App: React.FC = () => {
       return;
     }
 
+    setIsFirebaseLoaded(false);
     const stateRef = ref(db, `users/${ownerUid}/state`);
     return onValue(stateRef, (snapshot) => {
       const data = snapshot.val();
