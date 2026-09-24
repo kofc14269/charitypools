@@ -1,3 +1,4 @@
+import { buildSharedLink, copySharedLink } from '../../utils/sharedLinks';
 import React, { useState } from 'react';
 import { Pool } from '../../types';
 
@@ -14,10 +15,14 @@ interface AdminOverviewProps {
 
 const CopyButton: React.FC<{ url: string }> = ({ url }) => {
   const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    try {
+      await copySharedLink(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt('Copy this link:', url);
+    }
   };
   return (
     <button
@@ -33,14 +38,12 @@ const CopyButton: React.FC<{ url: string }> = ({ url }) => {
 };
 
 const AdminOverview: React.FC<AdminOverviewProps> = ({ financialSummary, ownerUid, activePoolId, pools }) => {
-  const origin = `${window.location.origin}${window.location.pathname}`;
-
-  const orgLink = ownerUid ? `${origin}?u=${ownerUid}` : null;
+  const orgLink = ownerUid ? buildSharedLink(ownerUid) : null;
 
   const contestLinks = ownerUid && pools && pools.length > 0
     ? pools.map(pool => ({
         pool,
-        url: `${origin}?u=${ownerUid}&p=${pool.id}`,
+        url: buildSharedLink(ownerUid, pool.id),
         isActive: pool.id === activePoolId,
       }))
     : [];
@@ -93,11 +96,11 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ financialSummary, ownerUi
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className={`flex-1 px-4 py-2.5 rounded-xl font-mono text-[10px] truncate select-all ${
+                    <a href={url} target="_blank" rel="noreferrer" className={`flex-1 px-4 py-2.5 rounded-xl font-mono text-[10px] truncate select-all ${
                       isActive ? 'bg-white/10 text-white/70 border border-white/10' : 'bg-white text-indigo-400 border border-indigo-100'
                     }`}>
                       {url}
-                    </div>
+                    </a>
                     <CopyButton url={url} />
                     <a
                       href={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(url)}&margin=10`}
@@ -132,7 +135,7 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ financialSummary, ownerUi
                 {orgLink}
               </div>
               <button
-                onClick={() => { navigator.clipboard.writeText(orgLink); }}
+                onClick={() => { copySharedLink(orgLink).catch(() => window.prompt('Copy this link:', orgLink)); }}
                 className="flex-shrink-0 px-4 py-2.5 rounded-xl font-black uppercase text-[9px] tracking-widest bg-slate-200 hover:bg-slate-300 text-slate-600 transition-all flex items-center gap-2"
               >
                 <i className="fas fa-copy"></i> Copy

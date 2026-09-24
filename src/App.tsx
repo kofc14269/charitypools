@@ -1,3 +1,4 @@
+import { buildSharedLink, copySharedLink, getContestTab, resolveSharedPool } from './utils/sharedLinks';
 
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from 'react';
 import { AppState, Square, Tab, Participant, PaymentTransaction, Pool, GlobalSettings, PoolSettings, ScoreEntry, PoolType, SurvivorData, ThirteenRunData, ThirteenRunEntry } from './types';
@@ -374,13 +375,15 @@ const App: React.FC = () => {
 
   const activePool = useMemo(() => {
     if (!state || !state.pools) return null;
-    // If a guest opened a per-contest public link (?p=<poolId>), pin to that pool
-    if (urlPoolId && !isAdminAuthenticated) {
-      const pinned = state.pools.find(p => p.id === urlPoolId);
-      if (pinned) return pinned;
-    }
-    return state.pools.find(p => p.id === state.activePoolId) || state.pools[0];
-  }, [state?.activePoolId, state?.pools, urlPoolId, isAdminAuthenticated]);
+    return resolveSharedPool(state.pools, state.activePoolId, urlPoolId);
+  }, [state?.activePoolId, state?.pools, urlPoolId]);
+
+  // A direct link starts before Firebase supplies the contest type.
+  useEffect(() => {
+    if (!activePool) return;
+    setActiveTab(current => ['grid', 'survivor', '13run', 'pickem'].includes(current)
+      ? getContestTab(activePool) : current);
+  }, [activePool?.id, activePool?.type]);
 
   const pendingSelection = activePool ? (pendingSelections[activePool.id] || []) : [];
   const availableCheckoutPools = useMemo(() => getAvailableSquarePools(state?.pools || []), [state?.pools]);
@@ -411,11 +414,11 @@ const App: React.FC = () => {
 
   const handleCopyContestLink = useCallback(() => {
     if (!ownerUid || !activePool) return;
-    const url = `${window.location.origin}${window.location.pathname}?u=${ownerUid}&p=${activePool.id}`;
-    navigator.clipboard.writeText(url).then(() => {
+    const url = buildSharedLink(ownerUid, activePool.id);
+    copySharedLink(url).then(() => {
       setCopiedContestId(activePool.id);
       setTimeout(() => setCopiedContestId(null), 2000);
-    });
+    }).catch(() => window.prompt('Copy this contest link:', url));
   }, [ownerUid, activePool]);
 
   // Global participants registry (may be migrated from per-pool participants)
@@ -478,7 +481,7 @@ const App: React.FC = () => {
   // Create a global participant and optionally ensure the active pool references it
   const handleCreateGlobalParticipant = useCallback((p: Participant) => {
     if (!state || !activePool || !ownerUid) return;
-    const targetPoolId = state.pools.some(x => x.id === state.activePoolId) ? state.activePoolId : activePool.id;
+    const targetPoolId = resolveTargetPoolId(state, activePool);
     const poolIndex = state.pools.findIndex(x => x.id === targetPoolId);
     if (poolIndex === -1) return;
     const existing = (state.participants || []).find(pp => pp.id === p.id || (pp.email && pp.email.toLowerCase() === p.email?.toLowerCase()));
@@ -496,7 +499,7 @@ const App: React.FC = () => {
 
   const updateActivePool = useCallback((updates: Partial<Pool>) => {
     if (!state || !activePool || !ownerUid) return;
-    const targetPoolId = state.pools.some(p => p.id === state.activePoolId) ? state.activePoolId : activePool.id;
+    const targetPoolId = resolveTargetPoolId(state, activePool);
     const poolIndex = state.pools.findIndex(p => p.id === targetPoolId);
     if (poolIndex === -1) return;
     update(ref(db, `users/${ownerUid}/state/pools/${poolIndex}`), updates)
@@ -508,7 +511,7 @@ const App: React.FC = () => {
 
   const updatePoolSettings = useCallback((newSettings: Partial<PoolSettings>) => {
     if (!state || !activePool || !ownerUid) return;
-    const targetPoolId = state.pools.some(p => p.id === state.activePoolId) ? state.activePoolId : activePool.id;
+    const targetPoolId = resolveTargetPoolId(state, activePool);
     const poolIndex = state.pools.findIndex(p => p.id === targetPoolId);
     if (poolIndex === -1) return;
     update(ref(db, `users/${ownerUid}/state/pools/${poolIndex}/settings`), newSettings)
@@ -908,7 +911,7 @@ const App: React.FC = () => {
 
   const handleUpdateParticipant = useCallback((id: string, updates: Partial<Participant>) => {
     if (!state || !activePool || !ownerUid) return;
-    const poolIndex = state.pools.findIndex(p => p.id === state.activePoolId);
+    const poolIndex = state.pools.findIndex(p => p.id === resolveTargetPoolId(state, activePool));
     if (poolIndex === -1) return;
 
     const rootUpdates: Record<string, Participant> = {};
@@ -974,6 +977,11 @@ const App: React.FC = () => {
     const newPool = createPool(name, type, { ...DEFAULT_POOL_SETTINGS, ...customSettings });
     const newPools = [...state.pools, newPool];
     set(ref(db, `users/${ownerUid}/state`), { ...state, pools: newPools, activePoolId: newPool.id })
+      .then(() => {
+        setUrlPoolId(newPool.id);
+        const url = new URL(buildSharedLink(ownerUid, newPool.id));
+        window.history.replaceState({}, '', url.toString());
+      })
       .catch(err => alert(`Create Pool Failed: ${err.message}`));
   }, [state, ownerUid]);
 
@@ -983,8 +991,10 @@ const App: React.FC = () => {
     if (isAdminAuthenticated) {
       update(ref(db, `users/${ownerUid}/state`), { activePoolId: id })
         .catch(err => alert(`Switch Failed: ${err.message}`));
-    } else {
+    }
+    {
       const params = new URLSearchParams(window.location.search);
+      params.set('u', ownerUid);
       params.set('p', id);
       const newUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
       window.history.pushState(null, '', newUrl);
@@ -1382,7 +1392,7 @@ const App: React.FC = () => {
           ) : (
             <Suspense fallback={<div className="p-6 text-center text-gray-500 font-bold uppercase text-xs">Loading admin panel...</div>}>
               <AdminPanel
-                activePoolId={state.activePoolId}
+                activePoolId={activePool?.id || state.activePoolId}
                 activePool={activePool}
                 poolSettings={activePool?.settings || DEFAULT_POOL_SETTINGS}
                 globalSettings={state.globalSettings}
@@ -1396,7 +1406,7 @@ const App: React.FC = () => {
                 participants={participantsForActivePool}
                 allParticipants={globalParticipants}
                 onCreateGlobalParticipant={handleCreateGlobalParticipant}
-                onUpdateSquare={(id, up) => update(ref(db, `users/${ownerUid}/state/pools/${state.pools.findIndex(p => p.id === state.activePoolId)}/squares/${id}`), up)}
+                onUpdateSquare={(id, up) => update(ref(db, `users/${ownerUid}/state/pools/${state.pools.findIndex(p => p.id === resolveTargetPoolId(state, activePool))}/squares/${id}`), up)}
                 onUpdateParticipant={handleUpdateParticipant}
                 onUnassignSquare={handleUnassignSquare}
                 onClearUserBoxes={handleClearUserBoxes}
