@@ -55,7 +55,7 @@ export const printLeaderboard = (winnerLeaderboard: { alias: string; totalWon: n
 };
 
 export const exportGridCSV = (squares: any[], getLabel: (type: 'row' | 'col', i: number) => any, participantMap: any, costPerBox: number) => {
-  const headers = ["Square #", "Row Num", "Col Num", "Player Alias", "Real Name", "Email", "Phone", "Status"];
+  const headers = ["Square #", "Row Num", "Col Num", "Player Alias", "Real Name", "Email", "Phone", "Sold By", "Status"];
   const csvRows = (squares || []).map(sq => {
     const p = sq.participantId ? participantMap[sq.participantId] : null;
     return [
@@ -66,6 +66,7 @@ export const exportGridCSV = (squares: any[], getLabel: (type: 'row' | 'col', i:
       p ? p.name : "",
       p ? p.email : "",
       p ? p.phone : "",
+      sq.soldBy || p?.soldBy || "",
       sq.paidAmount >= costPerBox ? "Paid" : (sq.assigned ? "Pending" : "Available")
     ];
   });

@@ -8,6 +8,7 @@ export function exportPoolCsv(activePool: Pool, participants: Participant[], squ
   csvRows.push([
     'Name',
     'Alias',
+    'Sold By',
     'Email',
     'Phone',
     'Total Entries',
@@ -55,6 +56,7 @@ export function exportPoolCsv(activePool: Pool, participants: Participant[], squ
       csvRows.push([
         p.name || '',
         p.alias || '',
+        p.soldBy || '',
         p.email || '',
         p.phone || '',
         String(entriesCount),

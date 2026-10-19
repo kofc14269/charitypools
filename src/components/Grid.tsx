@@ -217,7 +217,7 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
   };
 
   const handleExportCSV = () => {
-    const headers = ["Square #", "Row Num", "Col Num", "Player Alias", "Real Name", "Email", "Phone", "Status"];
+    const headers = ["Square #", "Row Num", "Col Num", "Player Alias", "Real Name", "Email", "Phone", "Sold By", "Status"];
     const csvRows = (squares || []).map(sq => {
       const p = sq.participantId ? participantMap[sq.participantId] : null;
       return [
@@ -228,6 +228,7 @@ const Grid: React.FC<GridProps> = ({ squares, pendingSelection, settings, onSqua
         p ? p.name : "",
         p ? p.email : "",
         p ? p.phone : "",
+        sq.soldBy || p?.soldBy || "",
         sq.paidAmount >= settings.costPerBox ? "Paid" : (sq.assigned ? "Pending" : "Available")
       ];
     });
